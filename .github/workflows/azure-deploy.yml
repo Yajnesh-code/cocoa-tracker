@@ -6,8 +6,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  BACKEND_IMAGE: ${{ github.repository }}/cocoa-backend
-  FRONTEND_IMAGE: ${{ github.repository }}/cocoa-frontend
+  BACKEND_IMAGE: yajnesh-code/cocoa-tracker/cocoa-backend
+  FRONTEND_IMAGE: yajnesh-code/cocoa-tracker/cocoa-frontend
 
 jobs:
   build-and-deploy:
