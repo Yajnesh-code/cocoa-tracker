@@ -280,5 +280,3 @@ Push to `main` branch → GitHub Actions will automatically build and deploy.
 - **Backend API:** `https://cocoa-tracker-backend.azurewebsites.net/api`
 - **QR Trace:** `https://cocoa-tracker-frontend.azurewebsites.net/trace/:batch_id`
 
-
-jj hh
