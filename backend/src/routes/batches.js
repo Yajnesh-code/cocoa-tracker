@@ -34,6 +34,11 @@ function buildFarmerBatchPrefix(farmerName) {
   return (normalized || 'FARMER').slice(0, 8);
 }
 
+function parseBatchSequence(batchCode) {
+  const match = String(batchCode || '').match(/-(\d{3,})$/);
+  return match ? Number(match[1]) : 0;
+}
+
 function buildMonthlyBatchReport(rows, selectedMonth) {
   const groups = rows.reduce((acc, row) => {
     const monthKey = row.month_key || 'unknown';
@@ -300,15 +305,14 @@ router.post('/', auth, async (req, res) => {
     const datePart = pod_date.replace(/-/g, '');
 
     const existingResult = await pool.query(
-      'SELECT batch_code FROM batches WHERE farmer_id = $1 AND pod_date = $2 ORDER BY created_at ASC',
-      [farmer_id, pod_date]
+      'SELECT batch_code FROM batches WHERE pod_date = $1 ORDER BY created_at ASC',
+      [pod_date]
     );
 
-    const maxSequence = existingResult.rows.reduce((max, row) => {
-      const match = String(row.batch_code || '').match(/-(\d{3,})$/);
-      if (!match) return max;
-      return Math.max(max, Number(match[1]));
-    }, 0);
+    const maxSequence = existingResult.rows.reduce(
+      (max, row) => Math.max(max, parseBatchSequence(row.batch_code)),
+      0
+    );
 
     const sequence = String(maxSequence + 1).padStart(3, '0');
     const batch_code = `${farmerPrefix}-${datePart}-${sequence}`;

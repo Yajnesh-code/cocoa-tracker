@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
 
-const emptyBucket = () => ({ type: 'good', weight: '' });
+const emptyBucket = () => ({ type: 'good', weight: '', bucket_weight: '' });
 
 export default function Breaking() {
   const [batches, setBatches] = useState([]);
@@ -19,6 +19,7 @@ export default function Breaking() {
     buckets[index] = { ...buckets[index], [field]: value };
     if (field === 'type') {
       buckets[index].weight = '';
+      buckets[index].bucket_weight = '';
     }
     setForm({ ...form, buckets });
   };
@@ -30,23 +31,32 @@ export default function Breaking() {
   };
 
   const totals = form.buckets.reduce((acc, bucket) => {
-    const weight = bucket.weight !== '' ? Number(bucket.weight) : 0;
+    const grossWeight = bucket.weight !== '' ? Number(bucket.weight) : 0;
+    const bucketWeight = bucket.bucket_weight !== '' ? Number(bucket.bucket_weight) : 0;
+    const safeGross = Number.isNaN(grossWeight) ? 0 : grossWeight;
+    const safeBucketWeight = Number.isNaN(bucketWeight) ? 0 : bucketWeight;
+    const netWeight = Math.max(0, safeGross - safeBucketWeight);
+
     if (bucket.type === 'good') {
-      return { good: acc.good + (Number.isNaN(weight) ? 0 : weight), bad: acc.bad };
+      return { good: acc.good + netWeight, bad: acc.bad };
     }
-    return { good: acc.good, bad: acc.bad + (Number.isNaN(weight) ? 0 : weight) };
+    return { good: acc.good, bad: acc.bad + netWeight };
   }, { good: 0, bad: 0 });
   const totalWet = totals.good + totals.bad;
 
   const submit = async (e) => {
-    e.preventDefault(); setError(''); setSuccess(''); setLoading(true);
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    setLoading(true);
 
-    const bucketRows = form.buckets.map(bucket => {
-      const weight = bucket.weight !== '' ? Number(bucket.weight) : null;
-      return bucket.type === 'good'
-        ? { good_weight: weight, bad_weight: null }
-        : { good_weight: null, bad_weight: weight };
-    }).filter(row => row.good_weight != null || row.bad_weight != null);
+    const bucketRows = form.buckets
+      .map((bucket) => ({
+        type: bucket.type,
+        weight: bucket.weight !== '' ? Number(bucket.weight) : null,
+        bucket_weight: bucket.bucket_weight !== '' ? Number(bucket.bucket_weight) : 0,
+      }))
+      .filter((row) => row.weight != null);
 
     if (bucketRows.length === 0) {
       setError('Please provide at least one bucket entry');
@@ -54,14 +64,26 @@ export default function Breaking() {
       return;
     }
 
-    if (bucketRows.some(row => (row.good_weight != null && Number.isNaN(row.good_weight)) || (row.bad_weight != null && Number.isNaN(row.bad_weight)))) {
+    if (bucketRows.some((row) => Number.isNaN(row.weight) || Number.isNaN(row.bucket_weight))) {
       setError('Please enter valid weights for all buckets');
       setLoading(false);
       return;
     }
 
-    if (bucketRows.some(row => (row.good_weight != null && row.good_weight <= 0) || (row.bad_weight != null && row.bad_weight <= 0))) {
-      setError('Bucket weight must be greater than zero');
+    if (bucketRows.some((row) => row.weight <= 0)) {
+      setError('Bucket gross weight must be greater than zero');
+      setLoading(false);
+      return;
+    }
+
+    if (bucketRows.some((row) => row.bucket_weight < 0)) {
+      setError('Empty bucket weight cannot be negative');
+      setLoading(false);
+      return;
+    }
+
+    if (bucketRows.some((row) => row.bucket_weight >= row.weight)) {
+      setError('Empty bucket weight must be less than gross bucket weight');
       setLoading(false);
       return;
     }
@@ -76,16 +98,18 @@ export default function Breaking() {
       setForm({ batch_id: '', breaking_date: '', buckets: [emptyBucket()] });
     } catch (err) {
       setError(err.response?.data?.error || 'Failed');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div>
       <div className="page-header">
-        <h1>🔨 Breaking Stage</h1>
-        <p>Record bucket-level good and bad bean weights after pod breaking</p>
+        <h1>Breaking Stage</h1>
+        <p>Record gross bucket weight, subtract the empty bucket weight, and save the net good and bad bean totals.</p>
       </div>
-      <div style={{ maxWidth: 640 }}>
+      <div style={{ maxWidth: 760 }}>
         <div className="card">
           {error && <div className="alert alert-error">{error}</div>}
           {success && <div className="alert alert-success">{success}</div>}
@@ -93,8 +117,10 @@ export default function Breaking() {
             <div className="form-group">
               <label>Select Batch *</label>
               <select name="batch_id" value={form.batch_id} onChange={handle} required>
-                <option value="">Select batch…</option>
-                {batches.filter(b => !b.packed).map(b => <option key={b.id} value={b.id}>{b.batch_code} — {b.farmer_name}</option>)}
+                <option value="">Select batch...</option>
+                {batches.filter((b) => !b.packed).map((b) => (
+                  <option key={b.id} value={b.id}>{b.batch_code} - {b.farmer_name}</option>
+                ))}
               </select>
             </div>
             <div className="form-group">
@@ -116,7 +142,7 @@ export default function Breaking() {
                     </select>
                   </div>
                   <div>
-                    <label>Bucket weight (kg)</label>
+                    <label>Gross bucket weight (kg)</label>
                     <input
                       type="number"
                       step="0.01"
@@ -124,6 +150,17 @@ export default function Breaking() {
                       value={bucket.weight}
                       onChange={(e) => handleBucketChange(index, 'weight', e.target.value)}
                       placeholder="e.g. 15.00"
+                    />
+                  </div>
+                  <div>
+                    <label>Empty bucket weight (kg)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={bucket.bucket_weight}
+                      onChange={(e) => handleBucketChange(index, 'bucket_weight', e.target.value)}
+                      placeholder="e.g. 1.20"
                     />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'flex-end' }}>
@@ -141,10 +178,10 @@ export default function Breaking() {
               </button>
             </div>
             <div style={{ marginBottom: 20, color: '#333' }}>
-              <strong>Totals:</strong> Good {totals.good.toFixed(2)} kg · Bad {totals.bad.toFixed(2)} kg · Wet {totalWet.toFixed(2)} kg
+              <strong>Net totals after bucket weight:</strong> Good {totals.good.toFixed(2)} kg | Bad {totals.bad.toFixed(2)} kg | Wet {totalWet.toFixed(2)} kg
             </div>
             <button className="btn btn-primary" type="submit" disabled={loading}>
-              {loading ? 'Saving…' : '💾 Record Breaking'}
+              {loading ? 'Saving...' : 'Record Breaking'}
             </button>
           </form>
         </div>

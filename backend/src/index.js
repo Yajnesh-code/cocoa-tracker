@@ -10,18 +10,26 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
+function normalizeOrigin(origin) {
+  return String(origin || '')
+    .trim()
+    .replace(/\/+$/, '');
+}
+
 const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
   .split(',')
-  .map((origin) => origin.trim())
+  .map(normalizeOrigin)
   .filter(Boolean);
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || allowedOrigins.includes(normalizeOrigin(origin))) {
       return callback(null, true);
     }
     return callback(new Error('Not allowed by CORS'));
   },
+  credentials: true,
+  optionsSuccessStatus: 204,
 }));
 app.use(express.json());
 
