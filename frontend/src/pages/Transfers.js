@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
 
 const BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
-  .flatMap(letter => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
+  .flatMap((letter) => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
+
+const MAX_ACTIVE_BATCHES_PER_BOX = 2;
 
 export default function Transfers() {
   const [batches, setBatches] = useState([]);
@@ -82,7 +84,8 @@ export default function Transfers() {
   const occupiedBoxes = fermentations
     .filter((f) => f.status === 'active')
     .reduce((map, f) => {
-      map[f.box_id] = f;
+      if (!map[f.box_id]) map[f.box_id] = [];
+      map[f.box_id].push(f);
       return map;
     }, {});
 
@@ -95,12 +98,13 @@ export default function Transfers() {
 
   const selectedBatch = batches.find((b) => String(b.id) === String(form.batch_id));
   const qrcodeUrl = selectedBatch ? `${window.location.origin}/trace/${selectedBatch.id}` : '';
+  const excelUrl = selectedBatch ? `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/trace/${selectedBatch.id}/export` : '';
 
   return (
     <div>
       <div className="page-header">
         <h1>Box Transfers</h1>
-        <p>Record cocoa movement between fermentation boxes and visualize chamber transfers.</p>
+        <p>Record cocoa movement between fermentation boxes. Each box can hold up to two active batches.</p>
       </div>
 
       <div className="grid-2">
@@ -129,9 +133,9 @@ export default function Transfers() {
                     No active box for this batch
                   </option>
                 ) : (
-                  Object.keys(batchBoxes).map((b) => (
-                    <option key={b} value={b}>
-                      {b}
+                  Object.keys(batchBoxes).map((box) => (
+                    <option key={box} value={box}>
+                      {box}
                     </option>
                   ))
                 )}
@@ -141,12 +145,16 @@ export default function Transfers() {
               <label>To Box *</label>
               <select name="to_box" value={form.to_box} onChange={handle} required>
                 <option value="">Select...</option>
-                {BOXES.filter((b) => b !== form.from_box).map((b) => {
-                  const occupied = occupiedBoxes[b];
+                {BOXES.filter((box) => box !== form.from_box).map((box) => {
+                  const activeAssignments = occupiedBoxes[box] || [];
+                  const occupiedCount = activeAssignments.length;
+                  const disabled = occupiedCount >= MAX_ACTIVE_BATCHES_PER_BOX;
+
                   return (
-                    <option key={b} value={b} disabled={Boolean(occupied)}>
-                      {b}
-                      {occupied ? ' - occupied' : ''}
+                    <option key={box} value={box} disabled={disabled}>
+                      {box}
+                      {occupiedCount > 0 ? ` - ${occupiedCount}/${MAX_ACTIVE_BATCHES_PER_BOX} used` : ''}
+                      {occupiedCount > 0 ? ` (${activeAssignments.map((item) => item.batch_code).join(', ')})` : ''}
                     </option>
                   );
                 })}
@@ -163,9 +171,13 @@ export default function Transfers() {
         </div>
 
         <div className="card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <h2>Transfer History</h2>
-            <div style={{ display: 'flex', gap: 8 }} />
+            {selectedBatch ? (
+              <a className="btn btn-sm btn-secondary" href={excelUrl} target="_blank" rel="noreferrer">
+                Download Batch Excel
+              </a>
+            ) : null}
           </div>
           <div className="table-wrap">
             <table>
@@ -186,12 +198,8 @@ export default function Transfers() {
                 ) : (
                   transfers.map((t) => (
                     <tr key={t.id}>
-                      <td>
-                        <strong>{t.from_box}</strong>
-                      </td>
-                      <td>
-                        <strong>{t.to_box}</strong>
-                      </td>
+                      <td><strong>{t.from_box}</strong></td>
+                      <td><strong>{t.to_box}</strong></td>
                       <td>{t.transfer_date?.slice(0, 10)}</td>
                     </tr>
                   ))
@@ -204,32 +212,45 @@ export default function Transfers() {
             <h3>Transfer Chamber</h3>
             <div className="box-grid box-grid-12">
               {BOXES.map((box) => {
-                const active = Boolean(occupiedBoxes[box]);
+                const activeAssignments = occupiedBoxes[box] || [];
+                const occupiedCount = activeAssignments.length;
                 const highlight = box === form.from_box || box === form.to_box;
+                const isFull = occupiedCount >= MAX_ACTIVE_BATCHES_PER_BOX;
+                const isPartiallyUsed = occupiedCount > 0 && !isFull;
+
                 return (
                   <div
                     key={box}
                     style={{
-                      background: active ? '#f8d7da' : '#e9f7ef',
-                      border: highlight ? '2px solid #0d6efd' : '1px solid #d1d5db',
-                      color: active ? '#842029' : '#0f5132',
+                      background: isFull ? '#f8d7da' : isPartiallyUsed ? '#fff3cd' : '#e9f7ef',
+                      border: highlight ? '2px solid var(--primary)' : '1px solid #d1d5db',
+                      color: isFull ? '#842029' : isPartiallyUsed ? '#856404' : '#0f5132',
                       borderRadius: 6,
                       padding: 10,
                       textAlign: 'center',
                       fontSize: '0.8rem',
                       fontWeight: 700,
-                      minHeight: 70,
+                      minHeight: 92,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      gap: 4,
                     }}
                   >
                     <div>{box}</div>
-                    <div style={{ marginTop: 6, fontSize: '0.75rem', fontWeight: 500 }}>
-                      {active ? 'Occupied' : 'Free'}
+                    <div style={{ marginTop: 2, fontSize: '0.72rem', fontWeight: 500 }}>
+                      {occupiedCount === 0 ? 'Free' : `${occupiedCount}/${MAX_ACTIVE_BATCHES_PER_BOX} used`}
                     </div>
-                    {highlight && (
-                      <div style={{ marginTop: 4, fontSize: '0.7rem', color: '#0d6efd' }}>
+                    {activeAssignments.map((item) => (
+                      <div key={item.id} style={{ fontSize: '0.68rem', wordBreak: 'break-word' }}>
+                        {item.batch_code}
+                      </div>
+                    ))}
+                    {highlight ? (
+                      <div style={{ marginTop: 4, fontSize: '0.7rem', color: 'var(--primary-dark)' }}>
                         {box === form.from_box ? 'From' : 'To'}
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 );
               })}
@@ -238,7 +259,7 @@ export default function Transfers() {
         </div>
       </div>
 
-      {selectedBatch && (
+      {selectedBatch ? (
         <div className="card printable" style={{ marginTop: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 20, marginBottom: 18, flexWrap: 'wrap' }}>
             <div>
@@ -247,7 +268,7 @@ export default function Transfers() {
               </div>
               <h2 style={{ marginBottom: 8 }}>Transfer and Traceability Overview</h2>
               <p style={{ color: 'var(--text-muted)', maxWidth: 520 }}>
-                This summary presents the current storage position, movement history, and quick-access trace link for the selected batch.
+                This summary presents the current storage position, movement history, and direct Excel export for the selected batch only.
               </p>
             </div>
             <div style={{ padding: '6px 12px', borderRadius: 999, background: '#eef6f0', color: 'var(--primary-dark)', fontWeight: 700, fontSize: '0.82rem' }}>
@@ -289,7 +310,7 @@ export default function Transfers() {
                   </div>
                 </div>
               </div>
-              {transfers.length > 0 && (
+              {transfers.length > 0 ? (
                 <div style={{ padding: 16, borderRadius: 12, background: '#1b4332', color: '#fff' }}>
                   <div style={{ fontSize: '0.78rem', opacity: 0.8, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Latest Transfer</div>
                   <div style={{ fontSize: '1rem', fontWeight: 700 }}>
@@ -299,7 +320,7 @@ export default function Transfers() {
                     Recorded on {formatDate(transfers[transfers.length - 1].transfer_date)}
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               <div style={{ marginBottom: 10, fontWeight: 700 }}>Digital Trace Access</div>
@@ -314,7 +335,7 @@ export default function Transfers() {
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
