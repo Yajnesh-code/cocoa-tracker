@@ -67,8 +67,6 @@ export default function Trace() {
   const bucketDetails = getBucketDetails(breaking);
   const handlePrint = () => window.print();
   const totalCollectedWeight = Number(batch.pod_weight || 0) + Number(batch.bad_pod_weight || 0);
-  const totalCollectedBags = Number(batch.bag_count || 0) + Number(batch.bad_bag_count || 0);
-
   const reportHighlights = [
     { label: 'Batch Code', value: batch.batch_code },
     { label: 'Farmer', value: batch.farmer_name },
@@ -196,7 +194,7 @@ export default function Trace() {
               <h4>Pod Collection</h4>
               <p>
                 Date: {formatDate(batch.pod_date)} | Good weight: {formatWeight(batch.pod_weight)} | Bad weight: {formatWeight(batch.bad_pod_weight)}
-                {' | '}Total weight: {formatWeight(totalCollectedWeight)} | Good bags: {batch.bag_count} | Bad bags: {batch.bad_bag_count || 0} | Total bags: {totalCollectedBags}
+                {' | '}Total weight: {formatWeight(totalCollectedWeight)}
               </p>
             </div>
 
@@ -204,7 +202,7 @@ export default function Trace() {
               <div className="timeline-item">
                 <h4>Breaking</h4>
                 <p>
-                  Date: {formatDate(breaking.breaking_date)} | Wet weight: {formatWeight(breaking.wet_weight)} | Buckets: {breaking.bag_count}
+                  Date: {formatDate(breaking.breaking_date)} | Wet weight: {formatWeight(breaking.wet_weight)}
                   {breaking.good_weight != null && ` | Good: ${formatWeightValue(breaking.good_weight)} kg`}
                   {breaking.bad_weight != null && ` | Bad: ${formatWeightValue(breaking.bad_weight)} kg`}
                 </p>
@@ -323,9 +321,6 @@ export default function Trace() {
               <div className="print-key-item"><div className="print-key-label">Good Bag Weight</div><div className="print-key-value">{formatWeight(batch.pod_weight)}</div></div>
               <div className="print-key-item"><div className="print-key-label">Bad Bag Weight</div><div className="print-key-value">{formatWeight(batch.bad_pod_weight)}</div></div>
               <div className="print-key-item"><div className="print-key-label">Total Collected Weight</div><div className="print-key-value">{formatWeight(totalCollectedWeight)}</div></div>
-              <div className="print-key-item"><div className="print-key-label">Good Bag Count</div><div className="print-key-value">{batch.bag_count}</div></div>
-              <div className="print-key-item"><div className="print-key-label">Bad Bag Count</div><div className="print-key-value">{batch.bad_bag_count || 0}</div></div>
-              <div className="print-key-item"><div className="print-key-label">Total Collected Bags</div><div className="print-key-value">{totalCollectedBags}</div></div>
               <div className="print-key-item"><div className="print-key-label">Active Box(es)</div><div className="print-key-value">{activeBoxes}</div></div>
             </div>
           </div>
@@ -342,9 +337,6 @@ export default function Trace() {
                   <div className="print-inline-row"><span>Collected weight</span><strong>{formatWeight(batch.pod_weight)}</strong></div>
                   <div className="print-inline-row"><span>Bad bag weight</span><strong>{formatWeight(batch.bad_pod_weight)}</strong></div>
                   <div className="print-inline-row"><span>Total collected weight</span><strong>{formatWeight(totalCollectedWeight)}</strong></div>
-                  <div className="print-inline-row"><span>Good bag count</span><strong>{batch.bag_count}</strong></div>
-                  <div className="print-inline-row"><span>Bad bag count</span><strong>{batch.bad_bag_count || 0}</strong></div>
-                  <div className="print-inline-row"><span>Total bag count</span><strong>{totalCollectedBags}</strong></div>
                 </div>
               </div>
 
@@ -356,7 +348,6 @@ export default function Trace() {
                   </div>
                   <div className="print-inline-list">
                     <div className="print-inline-row"><span>Wet weight</span><strong>{formatWeight(breaking.wet_weight)}</strong></div>
-                    <div className="print-inline-row"><span>Bucket count</span><strong>{breaking.bag_count}</strong></div>
                     <div className="print-inline-row"><span>Good beans</span><strong>{formatWeight(breaking.good_weight)}</strong></div>
                     <div className="print-inline-row"><span>Bad beans</span><strong>{formatWeight(breaking.bad_weight)}</strong></div>
                   </div>

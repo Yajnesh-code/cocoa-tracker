@@ -62,9 +62,6 @@ function buildExcelHtmlReport(data, batchId) {
     { label: 'Good Bag Weight (kg)', value: formatNumber(batch.pod_weight) },
     { label: 'Bad Bag Weight (kg)', value: formatNumber(batch.bad_pod_weight ?? 0) },
     { label: 'Total Collected Weight (kg)', value: formatNumber(Number(batch.pod_weight || 0) + Number(batch.bad_pod_weight || 0)) },
-    { label: 'Good Bag Count', value: batch.bag_count },
-    { label: 'Bad Bag Count', value: batch.bad_bag_count ?? 0 },
-    { label: 'Total Collected Bags', value: Number(batch.bag_count || 0) + Number(batch.bad_bag_count || 0) },
     { label: 'Status', value: packing ? 'Packed' : 'In Progress' },
   ];
 
@@ -72,7 +69,6 @@ function buildExcelHtmlReport(data, batchId) {
     ? [
         { label: 'Breaking Date', value: formatDate(breaking.breaking_date) },
         { label: 'Wet Weight (kg)', value: formatNumber(breaking.wet_weight) },
-        { label: 'Bucket Count', value: breaking.bag_count },
         { label: 'Good Bean Weight (kg)', value: formatNumber(breaking.good_weight) },
         { label: 'Bad Bean Weight (kg)', value: formatNumber(breaking.bad_weight) },
       ]

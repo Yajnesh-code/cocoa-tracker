@@ -3,6 +3,11 @@ const router = express.Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 
+function roundWeight(value) {
+  if (value === null || value === undefined || value === '') return null;
+  return Number(Number(value).toFixed(2));
+}
+
 // GET breaking record by batch
 router.get('/:batch_id', auth, async (req, res) => {
   try {
@@ -29,13 +34,13 @@ router.post('/', auth, async (req, res) => {
       const tareWeight = bucket.bucket_weight !== undefined && bucket.bucket_weight !== null && bucket.bucket_weight !== ''
         ? Number(bucket.bucket_weight)
         : 0;
-      const netWeight = grossWeight != null ? grossWeight - tareWeight : null;
+      const netWeight = grossWeight != null ? roundWeight(grossWeight - tareWeight) : null;
 
       if (bucket.type === 'good') {
         return {
           type: 'good',
-          gross_weight: grossWeight,
-          bucket_weight: tareWeight,
+          gross_weight: roundWeight(grossWeight),
+          bucket_weight: roundWeight(tareWeight),
           good_weight: netWeight,
           bad_weight: null,
         };
@@ -43,21 +48,21 @@ router.post('/', auth, async (req, res) => {
       if (bucket.type === 'bad') {
         return {
           type: 'bad',
-          gross_weight: grossWeight,
-          bucket_weight: tareWeight,
+          gross_weight: roundWeight(grossWeight),
+          bucket_weight: roundWeight(tareWeight),
           good_weight: null,
           bad_weight: netWeight,
         };
       }
       return {
         type: bucket.type || null,
-        gross_weight: grossWeight,
-        bucket_weight: tareWeight,
+        gross_weight: roundWeight(grossWeight),
+        bucket_weight: roundWeight(tareWeight),
         good_weight: bucket.good_weight !== undefined && bucket.good_weight !== null && bucket.good_weight !== ''
-          ? Number(bucket.good_weight)
+          ? roundWeight(bucket.good_weight)
           : null,
         bad_weight: bucket.bad_weight !== undefined && bucket.bad_weight !== null && bucket.bad_weight !== ''
-          ? Number(bucket.bad_weight)
+          ? roundWeight(bucket.bad_weight)
           : null,
       };
     }).filter(row => row.good_weight != null || row.bad_weight != null);
@@ -97,9 +102,9 @@ router.post('/', auth, async (req, res) => {
     return res.status(400).json({ error: 'Bucket weight cannot be greater than gross weight' });
   }
 
-  const goodWeight = bucketRows.reduce((sum, row) => sum + (row.good_weight || 0), 0);
-  const badWeight = bucketRows.reduce((sum, row) => sum + (row.bad_weight || 0), 0);
-  const wet_weight = goodWeight + badWeight;
+  const goodWeight = roundWeight(bucketRows.reduce((sum, row) => sum + (row.good_weight || 0), 0));
+  const badWeight = roundWeight(bucketRows.reduce((sum, row) => sum + (row.bad_weight || 0), 0));
+  const wet_weight = roundWeight(goodWeight + badWeight);
   const bag_count = bucketRows.length;
   const bucket_details = JSON.stringify(bucketRows);
 
