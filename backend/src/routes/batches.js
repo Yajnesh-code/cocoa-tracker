@@ -46,11 +46,47 @@ function parseBatchSequence(batchCode) {
   return match ? Number(match[1]) : 0;
 }
 
+function roundWeight(value) {
+  return Number(Number(value).toFixed(2));
+}
+
 function normalizeWeightArray(weights) {
   if (!Array.isArray(weights)) return [];
   return weights
     .map((weight) => Number(weight))
     .filter((weight) => !Number.isNaN(weight) && weight > 0);
+}
+
+function normalizeBagEntries(entries) {
+  if (!Array.isArray(entries)) return [];
+
+  return entries
+    .map((entry) => {
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+        const grossWeight = Number(entry.weight);
+        const bagWeight = entry.bag_weight !== undefined && entry.bag_weight !== null && entry.bag_weight !== ''
+          ? Number(entry.bag_weight)
+          : 0;
+
+        if (Number.isNaN(grossWeight) || grossWeight <= 0) return null;
+        if (Number.isNaN(bagWeight) || bagWeight < 0 || bagWeight >= grossWeight) return null;
+
+        return {
+          weight: roundWeight(grossWeight),
+          bag_weight: roundWeight(bagWeight),
+          net_weight: roundWeight(grossWeight - bagWeight),
+        };
+      }
+
+      const grossWeight = Number(entry);
+      if (Number.isNaN(grossWeight) || grossWeight <= 0) return null;
+      return {
+        weight: roundWeight(grossWeight),
+        bag_weight: 0,
+        net_weight: roundWeight(grossWeight),
+      };
+    })
+    .filter(Boolean);
 }
 
 function buildMonthlyBatchReport(rows, selectedMonth) {
@@ -312,21 +348,21 @@ router.get('/:id', auth, async (req, res) => {
 // POST create batch (pod collection)
 router.post('/', auth, async (req, res) => {
   const { farmer_id, bag_weights, good_bag_weights, bad_bag_weights, pod_date } = req.body;
-  const normalizedGoodBagWeights = normalizeWeightArray(
-    Array.isArray(good_bag_weights) ? good_bag_weights : bag_weights
+  const goodBagEntries = normalizeBagEntries(
+    Array.isArray(good_bag_weights) ? good_bag_weights : normalizeWeightArray(bag_weights)
   );
-  const normalizedBadBagWeights = normalizeWeightArray(bad_bag_weights);
+  const badBagEntries = normalizeBagEntries(bad_bag_weights);
 
   if (!farmer_id || !pod_date)
     return res.status(400).json({ error: 'farmer_id and pod_date are required' });
 
-  if (normalizedGoodBagWeights.length === 0 && normalizedBadBagWeights.length === 0)
+  if (goodBagEntries.length === 0 && badBagEntries.length === 0)
     return res.status(400).json({ error: 'Add at least one good bag or bad bag weight' });
 
-  const pod_weight = normalizedGoodBagWeights.reduce((sum, w) => sum + w, 0);
-  const bad_pod_weight = normalizedBadBagWeights.reduce((sum, w) => sum + w, 0);
-  const bag_count = normalizedGoodBagWeights.length;
-  const bad_bag_count = normalizedBadBagWeights.length;
+  const pod_weight = roundWeight(goodBagEntries.reduce((sum, entry) => sum + entry.net_weight, 0));
+  const bad_pod_weight = roundWeight(badBagEntries.reduce((sum, entry) => sum + entry.net_weight, 0));
+  const bag_count = goodBagEntries.length;
+  const bad_bag_count = badBagEntries.length;
 
   try {
     const farmerResult = await pool.query(

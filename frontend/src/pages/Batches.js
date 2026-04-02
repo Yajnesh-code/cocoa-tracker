@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 
+const emptyBag = () => ({ weight: '', bag_weight: '' });
+
 export default function Batches() {
   const { user } = useAuth();
   const [batches, setBatches] = useState([]);
   const [farmers, setFarmers] = useState([]);
-  const [goodBags, setGoodBags] = useState(['']);
-  const [badBags, setBadBags] = useState(['']);
+  const [goodBags, setGoodBags] = useState([emptyBag()]);
+  const [badBags, setBadBags] = useState([emptyBag()]);
   const [form, setForm] = useState({ farmer_id: '', pod_date: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -26,26 +28,46 @@ export default function Batches() {
 
   const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value });
   const formatWeight = (value) => `${(parseFloat(value) || 0).toFixed(2)} kg`;
-  const sumWeights = (weights) => weights.reduce((sum, weight) => sum + (parseFloat(weight) || 0), 0);
-  const setBag = (type, i, v) => {
+  const countFilledBags = (bags) => bags.filter((bag) => bag.weight !== '').length;
+  const sumNetWeights = (bags) =>
+    bags.reduce((sum, bag) => {
+      const gross = bag.weight !== '' ? Number(bag.weight) : 0;
+      const tare = bag.bag_weight !== '' ? Number(bag.bag_weight) : 0;
+      if (Number.isNaN(gross) || Number.isNaN(tare)) return sum;
+      return sum + Math.max(0, gross - tare);
+    }, 0);
+
+  const setBag = (type, index, field, value) => {
     const source = type === 'bad' ? badBags : goodBags;
     const setter = type === 'bad' ? setBadBags : setGoodBags;
     const next = [...source];
-    next[i] = v;
+    next[index] = { ...next[index], [field]: value };
     setter(next);
   };
+
   const addBag = (type) => {
-    if (type === 'bad') setBadBags([...badBags, '']);
-    else setGoodBags([...goodBags, '']);
+    if (type === 'bad') setBadBags([...badBags, emptyBag()]);
+    else setGoodBags([...goodBags, emptyBag()]);
   };
-  const removeBag = (type, i) => {
+
+  const removeBag = (type, index) => {
     const source = type === 'bad' ? badBags : goodBags;
     const setter = type === 'bad' ? setBadBags : setGoodBags;
-    setter(source.filter((_, idx) => idx !== i));
+    const next = source.filter((_, idx) => idx !== index);
+    setter(next.length ? next : [emptyBag()]);
   };
-  const goodTotal = sumWeights(goodBags);
-  const badTotal = sumWeights(badBags);
+
+  const goodTotal = sumNetWeights(goodBags);
+  const badTotal = sumNetWeights(badBags);
   const total = (goodTotal + badTotal).toFixed(2);
+
+  const buildBagPayload = (bags) =>
+    bags
+      .map((bag) => ({
+        weight: bag.weight !== '' ? Number(bag.weight) : null,
+        bag_weight: bag.bag_weight !== '' ? Number(bag.bag_weight) : 0,
+      }))
+      .filter((bag) => bag.weight != null);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -53,10 +75,21 @@ export default function Batches() {
     setSuccess('');
     setLoading(true);
 
-    const good_bag_weights = goodBags.map(Number).filter((weight) => weight > 0);
-    const bad_bag_weights = badBags.map(Number).filter((weight) => weight > 0);
+    const good_bag_weights = buildBagPayload(goodBags);
+    const bad_bag_weights = buildBagPayload(badBags);
+
     if (good_bag_weights.length === 0 && bad_bag_weights.length === 0) {
       setError('Add at least one good bag or bad bag weight');
+      setLoading(false);
+      return;
+    }
+
+    const invalidBag = [...good_bag_weights, ...bad_bag_weights].find(
+      (bag) => Number.isNaN(bag.weight) || Number.isNaN(bag.bag_weight) || bag.weight <= 0 || bag.bag_weight < 0 || bag.bag_weight >= bag.weight
+    );
+
+    if (invalidBag) {
+      setError('Each bag must have a valid gross weight, and empty bag weight must be less than gross weight');
       setLoading(false);
       return;
     }
@@ -65,8 +98,8 @@ export default function Batches() {
       const res = await api.post('/batches', { ...form, good_bag_weights, bad_bag_weights });
       setSuccess(`Batch ${res.data.batch_code} created!`);
       setForm({ farmer_id: '', pod_date: '' });
-      setGoodBags(['']);
-      setBadBags(['']);
+      setGoodBags([emptyBag()]);
+      setBadBags([emptyBag()]);
       await load();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed');
@@ -96,11 +129,52 @@ export default function Batches() {
     }
   };
 
+  const renderBagInputs = (bags, type) => (
+    <>
+      {bags.map((bag, index) => (
+        <div key={`${type}-${index}`} className="bucket-row">
+          <div>
+            <label>Gross bag weight (kg)</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder={`${type === 'good' ? 'Good' : 'Bad'} bag ${index + 1} gross weight`}
+              value={bag.weight}
+              onChange={(e) => setBag(type, index, 'weight', e.target.value)}
+            />
+          </div>
+          <div>
+            <label>Empty bag weight (kg)</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="e.g. 0.20"
+              value={bag.bag_weight}
+              onChange={(e) => setBag(type, index, 'bag_weight', e.target.value)}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            {bags.length > 1 ? (
+              <button type="button" className="btn btn-sm btn-danger" onClick={() => removeBag(type, index)}>
+                Remove
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ))}
+      <button type="button" className="btn btn-sm btn-secondary" onClick={() => addBag(type)}>
+        Add {type === 'good' ? 'Good' : 'Bad'} Bag
+      </button>
+    </>
+  );
+
   return (
     <div>
       <div className="page-header">
         <h1>Pod Collection</h1>
-        <p>Record cocoa pod collection batches from farmers</p>
+        <p>Record cocoa pod collection batches from farmers using net bag weight after subtracting the empty bag weight.</p>
       </div>
 
       <div className="grid-2">
@@ -126,59 +200,19 @@ export default function Batches() {
             </div>
             <div className="form-group">
               <label>Good Bag Weights (kg)</label>
-              {goodBags.map((bag, i) => (
-                <div key={i} className="input-row">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder={`Good bag ${i + 1} weight`}
-                    value={bag}
-                    onChange={(e) => setBag('good', i, e.target.value)}
-                    style={{ flex: 1 }}
-                  />
-                  {goodBags.length > 1 && (
-                    <button type="button" className="btn btn-sm btn-danger" onClick={() => removeBag('good', i)}>
-                      Remove
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button type="button" className="btn btn-sm btn-secondary" onClick={() => addBag('good')}>
-                Add Good Bag
-              </button>
+              {renderBagInputs(goodBags, 'good')}
               <div style={{ marginTop: 8, fontSize: '0.9rem', color: 'var(--primary)', fontWeight: 600 }}>
-                Good total: {formatWeight(goodTotal)} ({goodBags.filter((bag) => bag).length} bags)
+                Good total: {formatWeight(goodTotal)} ({countFilledBags(goodBags)} bags)
               </div>
             </div>
             <div className="form-group">
               <label>Bad Bag Weights (kg)</label>
-              {badBags.map((bag, i) => (
-                <div key={i} className="input-row">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder={`Bad bag ${i + 1} weight`}
-                    value={bag}
-                    onChange={(e) => setBag('bad', i, e.target.value)}
-                    style={{ flex: 1 }}
-                  />
-                  {badBags.length > 1 && (
-                    <button type="button" className="btn btn-sm btn-danger" onClick={() => removeBag('bad', i)}>
-                      Remove
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button type="button" className="btn btn-sm btn-secondary" onClick={() => addBag('bad')}>
-                Add Bad Bag
-              </button>
+              {renderBagInputs(badBags, 'bad')}
               <div style={{ marginTop: 8, fontSize: '0.9rem', color: 'var(--primary)', fontWeight: 600 }}>
-                Bad total: {formatWeight(badTotal)} ({badBags.filter((bag) => bag).length} bags)
+                Bad total: {formatWeight(badTotal)} ({countFilledBags(badBags)} bags)
               </div>
               <div style={{ marginTop: 8, fontSize: '0.95rem', color: 'var(--primary-dark)', fontWeight: 700 }}>
-                Grand total: {total} kg ({goodBags.filter((bag) => bag).length + badBags.filter((bag) => bag).length} bags)
+                Grand total: {total} kg ({countFilledBags(goodBags) + countFilledBags(badBags)} bags)
               </div>
             </div>
             <button className="btn btn-primary" type="submit" disabled={loading}>
