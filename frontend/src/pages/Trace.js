@@ -3,7 +3,16 @@ import { useParams } from 'react-router-dom';
 import api from '../api/axios';
 
 const formatDate = (value) => (value ? value.slice(0, 10) : 'Not recorded');
-const formatWeight = (value) => (value !== null && value !== undefined && value !== '' ? `${value} kg` : 'Not recorded');
+const formatWeightValue = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) return String(value);
+  return numeric.toFixed(2);
+};
+const formatWeight = (value) => {
+  const formatted = formatWeightValue(value);
+  return formatted !== null ? `${formatted} kg` : 'Not recorded';
+};
 
 function getBucketDetails(breaking) {
   if (!breaking?.bucket_details) return [];
@@ -57,6 +66,8 @@ export default function Trace() {
   const activeBoxes = fermentation?.filter((item) => item.status === 'active').map((item) => item.box_id).join(', ') || 'None';
   const bucketDetails = getBucketDetails(breaking);
   const handlePrint = () => window.print();
+  const totalCollectedWeight = Number(batch.pod_weight || 0) + Number(batch.bad_pod_weight || 0);
+  const totalCollectedBags = Number(batch.bag_count || 0) + Number(batch.bad_bag_count || 0);
 
   const reportHighlights = [
     { label: 'Batch Code', value: batch.batch_code },
@@ -183,24 +194,27 @@ export default function Trace() {
           <div className="timeline">
             <div className="timeline-item">
               <h4>Pod Collection</h4>
-              <p>Date: {formatDate(batch.pod_date)} | Weight: {formatWeight(batch.pod_weight)} | Bags: {batch.bag_count}</p>
+              <p>
+                Date: {formatDate(batch.pod_date)} | Good weight: {formatWeight(batch.pod_weight)} | Bad weight: {formatWeight(batch.bad_pod_weight)}
+                {' | '}Total weight: {formatWeight(totalCollectedWeight)} | Good bags: {batch.bag_count} | Bad bags: {batch.bad_bag_count || 0} | Total bags: {totalCollectedBags}
+              </p>
             </div>
 
             {breaking && (
               <div className="timeline-item">
                 <h4>Breaking</h4>
                 <p>
-                  Date: {formatDate(breaking.breaking_date)} | Wet weight: {formatWeight(breaking.wet_weight)} | Bags: {breaking.bag_count}
-                  {breaking.good_weight != null && ` | Good: ${breaking.good_weight} kg`}
-                  {breaking.bad_weight != null && ` | Bad: ${breaking.bad_weight} kg`}
+                  Date: {formatDate(breaking.breaking_date)} | Wet weight: {formatWeight(breaking.wet_weight)} | Buckets: {breaking.bag_count}
+                  {breaking.good_weight != null && ` | Good: ${formatWeightValue(breaking.good_weight)} kg`}
+                  {breaking.bad_weight != null && ` | Bad: ${formatWeightValue(breaking.bad_weight)} kg`}
                 </p>
                 {bucketDetails.length > 0 && (
                   <div style={{ marginTop: 16 }}>
                     <strong style={{ display: 'block', marginBottom: 10 }}>Bucket breakdown</strong>
                     <div style={{ display: 'grid', gap: 10, padding: 14, background: '#111827', borderRadius: 14, color: '#f8fafc' }}>
                       {bucketDetails.map((bucket, index) => {
-                        const good = bucket.good_weight != null ? `Good: ${bucket.good_weight} kg` : null;
-                        const bad = bucket.bad_weight != null ? `Bad: ${bucket.bad_weight} kg` : null;
+                        const good = bucket.good_weight != null ? `Good: ${formatWeightValue(bucket.good_weight)} kg` : null;
+                        const bad = bucket.bad_weight != null ? `Bad: ${formatWeightValue(bucket.bad_weight)} kg` : null;
                         return (
                           <div key={index} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, background: '#1f2937' }}>
                             <span>Bucket {index + 1}</span>
@@ -222,8 +236,8 @@ export default function Trace() {
                     Box: {item.box_id} | Start: {formatDate(item.start_date)}
                     {item.end_date && ` | End: ${formatDate(item.end_date)}`}
                     {' | '}Status: <span className={`badge badge-${item.status}`}>{item.status}</span>
-                    {item.good_weight != null && ` | Good: ${item.good_weight} kg`}
-                    {item.bad_weight != null && ` | Bad: ${item.bad_weight} kg`}
+                    {item.good_weight != null && ` | Good: ${formatWeightValue(item.good_weight)} kg`}
+                    {item.bad_weight != null && ` | Bad: ${formatWeightValue(item.bad_weight)} kg`}
                   </p>
                 ))}
               </div>
@@ -266,7 +280,7 @@ export default function Trace() {
                         fontWeight: 600,
                       }}
                     >
-                      Day {index + 1}: {item.moisture_pct}%
+                      Day {index + 1}: {formatWeightValue(item.moisture_pct)}%
                     </span>
                   ))}
                 </div>
@@ -306,8 +320,12 @@ export default function Trace() {
               <div className="print-key-item"><div className="print-key-label">Farmer Code</div><div className="print-key-value">{batch.farmer_code}</div></div>
               <div className="print-key-item"><div className="print-key-label">Location</div><div className="print-key-value">{batch.location}</div></div>
               <div className="print-key-item"><div className="print-key-label">Collection Date</div><div className="print-key-value">{formatDate(batch.pod_date)}</div></div>
-              <div className="print-key-item"><div className="print-key-label">Collected Weight</div><div className="print-key-value">{formatWeight(batch.pod_weight)}</div></div>
-              <div className="print-key-item"><div className="print-key-label">Collected Bags</div><div className="print-key-value">{batch.bag_count}</div></div>
+              <div className="print-key-item"><div className="print-key-label">Good Bag Weight</div><div className="print-key-value">{formatWeight(batch.pod_weight)}</div></div>
+              <div className="print-key-item"><div className="print-key-label">Bad Bag Weight</div><div className="print-key-value">{formatWeight(batch.bad_pod_weight)}</div></div>
+              <div className="print-key-item"><div className="print-key-label">Total Collected Weight</div><div className="print-key-value">{formatWeight(totalCollectedWeight)}</div></div>
+              <div className="print-key-item"><div className="print-key-label">Good Bag Count</div><div className="print-key-value">{batch.bag_count}</div></div>
+              <div className="print-key-item"><div className="print-key-label">Bad Bag Count</div><div className="print-key-value">{batch.bad_bag_count || 0}</div></div>
+              <div className="print-key-item"><div className="print-key-label">Total Collected Bags</div><div className="print-key-value">{totalCollectedBags}</div></div>
               <div className="print-key-item"><div className="print-key-label">Active Box(es)</div><div className="print-key-value">{activeBoxes}</div></div>
             </div>
           </div>
@@ -322,7 +340,11 @@ export default function Trace() {
                 </div>
                 <div className="print-inline-list">
                   <div className="print-inline-row"><span>Collected weight</span><strong>{formatWeight(batch.pod_weight)}</strong></div>
-                  <div className="print-inline-row"><span>Bag count</span><strong>{batch.bag_count}</strong></div>
+                  <div className="print-inline-row"><span>Bad bag weight</span><strong>{formatWeight(batch.bad_pod_weight)}</strong></div>
+                  <div className="print-inline-row"><span>Total collected weight</span><strong>{formatWeight(totalCollectedWeight)}</strong></div>
+                  <div className="print-inline-row"><span>Good bag count</span><strong>{batch.bag_count}</strong></div>
+                  <div className="print-inline-row"><span>Bad bag count</span><strong>{batch.bad_bag_count || 0}</strong></div>
+                  <div className="print-inline-row"><span>Total bag count</span><strong>{totalCollectedBags}</strong></div>
                 </div>
               </div>
 
@@ -334,7 +356,7 @@ export default function Trace() {
                   </div>
                   <div className="print-inline-list">
                     <div className="print-inline-row"><span>Wet weight</span><strong>{formatWeight(breaking.wet_weight)}</strong></div>
-                    <div className="print-inline-row"><span>Bag count</span><strong>{breaking.bag_count}</strong></div>
+                    <div className="print-inline-row"><span>Bucket count</span><strong>{breaking.bag_count}</strong></div>
                     <div className="print-inline-row"><span>Good beans</span><strong>{formatWeight(breaking.good_weight)}</strong></div>
                     <div className="print-inline-row"><span>Bad beans</span><strong>{formatWeight(breaking.bad_weight)}</strong></div>
                   </div>
@@ -398,7 +420,7 @@ export default function Trace() {
                     {moisture_logs.map((item, index) => (
                       <div className="print-inline-row" key={item.id || index}>
                         <span>Day {index + 1}</span>
-                        <strong>{item.moisture_pct}%</strong>
+                        <strong>{formatWeightValue(item.moisture_pct)}%</strong>
                       </div>
                     ))}
                   </div>

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 
+const formatWeight = (value) => `${(parseFloat(value) || 0).toFixed(2)} kg`;
+
 export default function Dashboard() {
   const { user } = useAuth();
   const [batches, setBatches] = useState([]);
@@ -63,7 +65,7 @@ export default function Dashboard() {
                         <td><strong>{b.batch_code}</strong></td>
                         <td>{b.farmer_name}</td>
                         <td>{b.location}</td>
-                        <td>{b.pod_weight} kg</td>
+                        <td>{formatWeight(Number(b.pod_weight || 0) + Number(b.bad_pod_weight || 0))}</td>
                         <td>{b.pod_date?.slice(0,10)}</td>
                         <td>
                           <a href={`/trace/${b.id}`} target="_blank" rel="noreferrer" className="btn btn-sm btn-secondary">🔍 Trace</a>

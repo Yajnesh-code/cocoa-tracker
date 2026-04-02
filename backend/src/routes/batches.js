@@ -16,6 +16,13 @@ function formatDate(value) {
   return value ? String(value).slice(0, 10) : 'Not recorded';
 }
 
+function formatWeight(value) {
+  if (value === null || value === undefined || value === '') return 'Not recorded';
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) return String(value);
+  return numeric.toFixed(2);
+}
+
 function formatMonthLabel(value) {
   if (!value) return 'Unknown Month';
   const [year, month] = String(value).split('-');
@@ -39,6 +46,13 @@ function parseBatchSequence(batchCode) {
   return match ? Number(match[1]) : 0;
 }
 
+function normalizeWeightArray(weights) {
+  if (!Array.isArray(weights)) return [];
+  return weights
+    .map((weight) => Number(weight))
+    .filter((weight) => !Number.isNaN(weight) && weight > 0);
+}
+
 function buildMonthlyBatchReport(rows, selectedMonth) {
   const groups = rows.reduce((acc, row) => {
     const monthKey = row.month_key || 'unknown';
@@ -51,7 +65,10 @@ function buildMonthlyBatchReport(rows, selectedMonth) {
 
   const sections = orderedMonths.map((monthKey) => {
     const monthRows = groups[monthKey];
-    const monthTotalWeight = monthRows.reduce((sum, row) => sum + Number(row.pod_weight || 0), 0);
+    const monthTotalWeight = monthRows.reduce(
+      (sum, row) => sum + Number(row.pod_weight || 0) + Number(row.bad_pod_weight || 0),
+      0
+    );
 
     return `
       <div class="section">
@@ -67,8 +84,12 @@ function buildMonthlyBatchReport(rows, selectedMonth) {
               <th>Farmer</th>
               <th>Location</th>
               <th>Pod Date</th>
-              <th>Bag Count</th>
-              <th>Pod Weight (kg)</th>
+              <th>Good Bags</th>
+              <th>Bad Bags</th>
+              <th>Total Bags</th>
+              <th>Good Weight (kg)</th>
+              <th>Bad Weight (kg)</th>
+              <th>Total Weight (kg)</th>
               <th>Breaking Date</th>
               <th>Wet Weight (kg)</th>
               <th>Fermentation Boxes</th>
@@ -88,14 +109,18 @@ function buildMonthlyBatchReport(rows, selectedMonth) {
                 <td>${escapeHtml(row.location)}</td>
                 <td>${escapeHtml(formatDate(row.pod_date))}</td>
                 <td>${escapeHtml(row.bag_count)}</td>
-                <td>${escapeHtml(row.pod_weight)}</td>
+                <td>${escapeHtml(row.bad_bag_count ?? 0)}</td>
+                <td>${escapeHtml(Number(row.bag_count || 0) + Number(row.bad_bag_count || 0))}</td>
+                <td>${escapeHtml(formatWeight(row.pod_weight))}</td>
+                <td>${escapeHtml(formatWeight(row.bad_pod_weight ?? 0))}</td>
+                <td>${escapeHtml(formatWeight(Number(row.pod_weight || 0) + Number(row.bad_pod_weight || 0)))}</td>
                 <td>${escapeHtml(formatDate(row.breaking_date))}</td>
-                <td>${escapeHtml(row.wet_weight ?? 'Not recorded')}</td>
+                <td>${escapeHtml(formatWeight(row.wet_weight))}</td>
                 <td>${escapeHtml(row.fermentation_boxes || 'Not assigned')}</td>
                 <td>${escapeHtml(row.transfer_count ?? 0)}</td>
                 <td>${escapeHtml(row.shelf_id || 'Not assigned')}</td>
                 <td>${escapeHtml(formatDate(row.packing_date))}</td>
-                <td>${escapeHtml(row.final_weight ?? 'Not recorded')}</td>
+                <td>${escapeHtml(formatWeight(row.final_weight))}</td>
                 <td>${escapeHtml(row.packed ? 'Done' : 'In Progress')}</td>
               </tr>
             `).join('')}
@@ -218,7 +243,9 @@ router.get('/export/monthly', auth, async (req, res) => {
         b.id,
         b.batch_code,
         b.bag_count,
+        b.bad_bag_count,
         b.pod_weight,
+        b.bad_pod_weight,
         b.pod_date,
         TO_CHAR(b.pod_date, 'YYYY-MM') AS month_key,
         f.farmer_code,
@@ -284,12 +311,22 @@ router.get('/:id', auth, async (req, res) => {
 
 // POST create batch (pod collection)
 router.post('/', auth, async (req, res) => {
-  const { farmer_id, bag_weights, pod_date } = req.body;
-  if (!farmer_id || !bag_weights || !Array.isArray(bag_weights) || !pod_date)
-    return res.status(400).json({ error: 'farmer_id, bag_weights (array), and pod_date are required' });
+  const { farmer_id, bag_weights, good_bag_weights, bad_bag_weights, pod_date } = req.body;
+  const normalizedGoodBagWeights = normalizeWeightArray(
+    Array.isArray(good_bag_weights) ? good_bag_weights : bag_weights
+  );
+  const normalizedBadBagWeights = normalizeWeightArray(bad_bag_weights);
 
-  const pod_weight = bag_weights.reduce((sum, w) => sum + Number(w), 0);
-  const bag_count = bag_weights.length;
+  if (!farmer_id || !pod_date)
+    return res.status(400).json({ error: 'farmer_id and pod_date are required' });
+
+  if (normalizedGoodBagWeights.length === 0 && normalizedBadBagWeights.length === 0)
+    return res.status(400).json({ error: 'Add at least one good bag or bad bag weight' });
+
+  const pod_weight = normalizedGoodBagWeights.reduce((sum, w) => sum + w, 0);
+  const bad_pod_weight = normalizedBadBagWeights.reduce((sum, w) => sum + w, 0);
+  const bag_count = normalizedGoodBagWeights.length;
+  const bad_bag_count = normalizedBadBagWeights.length;
 
   try {
     const farmerResult = await pool.query(
@@ -318,9 +355,9 @@ router.post('/', auth, async (req, res) => {
     const batch_code = `${farmerPrefix}-${datePart}-${sequence}`;
 
     const result = await pool.query(
-      `INSERT INTO batches (batch_code, farmer_id, bag_count, pod_weight, pod_date)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [batch_code, farmer_id, bag_count, pod_weight, pod_date]
+      `INSERT INTO batches (batch_code, farmer_id, bag_count, bad_bag_count, pod_weight, bad_pod_weight, pod_date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [batch_code, farmer_id, bag_count, bad_bag_count, pod_weight, bad_pod_weight, pod_date]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {

@@ -7,6 +7,13 @@ function formatDate(value) {
   return value ? String(value).slice(0, 10) : 'Not recorded';
 }
 
+function formatNumber(value) {
+  if (value === null || value === undefined || value === '') return 'Not recorded';
+  const numeric = Number(value);
+  if (Number.isNaN(numeric)) return String(value);
+  return numeric.toFixed(2);
+}
+
 function escapeHtml(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -52,18 +59,22 @@ function buildExcelHtmlReport(data, batchId) {
     { label: 'Farmer Code', value: batch.farmer_code },
     { label: 'Location', value: batch.location },
     { label: 'Collection Date', value: formatDate(batch.pod_date) },
-    { label: 'Collected Weight (kg)', value: batch.pod_weight },
-    { label: 'Collected Bags', value: batch.bag_count },
+    { label: 'Good Bag Weight (kg)', value: formatNumber(batch.pod_weight) },
+    { label: 'Bad Bag Weight (kg)', value: formatNumber(batch.bad_pod_weight ?? 0) },
+    { label: 'Total Collected Weight (kg)', value: formatNumber(Number(batch.pod_weight || 0) + Number(batch.bad_pod_weight || 0)) },
+    { label: 'Good Bag Count', value: batch.bag_count },
+    { label: 'Bad Bag Count', value: batch.bad_bag_count ?? 0 },
+    { label: 'Total Collected Bags', value: Number(batch.bag_count || 0) + Number(batch.bad_bag_count || 0) },
     { label: 'Status', value: packing ? 'Packed' : 'In Progress' },
   ];
 
   const breakingRows = breaking
     ? [
         { label: 'Breaking Date', value: formatDate(breaking.breaking_date) },
-        { label: 'Wet Weight (kg)', value: breaking.wet_weight },
-        { label: 'Bag Count', value: breaking.bag_count },
-        { label: 'Good Bean Weight (kg)', value: breaking.good_weight ?? 'Not recorded' },
-        { label: 'Bad Bean Weight (kg)', value: breaking.bad_weight ?? 'Not recorded' },
+        { label: 'Wet Weight (kg)', value: formatNumber(breaking.wet_weight) },
+        { label: 'Bucket Count', value: breaking.bag_count },
+        { label: 'Good Bean Weight (kg)', value: formatNumber(breaking.good_weight) },
+        { label: 'Bad Bean Weight (kg)', value: formatNumber(breaking.bad_weight) },
       ]
     : [];
 
@@ -72,8 +83,8 @@ function buildExcelHtmlReport(data, batchId) {
     start_date: formatDate(item.start_date),
     end_date: formatDate(item.end_date),
     status: item.status,
-    good_weight: item.good_weight ?? 'Not recorded',
-    bad_weight: item.bad_weight ?? 'Not recorded',
+    good_weight: formatNumber(item.good_weight),
+    bad_weight: formatNumber(item.bad_weight),
   }));
 
   const transferRows = transfers.map((item) => ({
@@ -84,7 +95,7 @@ function buildExcelHtmlReport(data, batchId) {
 
   const moistureRows = moisture_logs.map((item, index) => ({
     day: `Day ${index + 1}`,
-    moisture: `${item.moisture_pct}%`,
+    moisture: `${formatNumber(item.moisture_pct)}%`,
     log_date: formatDate(item.log_date),
   }));
 
@@ -278,7 +289,7 @@ function buildExcelHtmlReport(data, batchId) {
               packing
                 ? renderKeyValueRows([
                     { label: 'Packing Date', value: formatDate(packing.packing_date) },
-                    { label: 'Final Weight (kg)', value: packing.final_weight },
+                    { label: 'Final Weight (kg)', value: formatNumber(packing.final_weight) },
                     { label: 'Bag Count', value: packing.bag_count },
                   ])
                 : '<tr><td class="empty" colspan="2">No packing record available</td></tr>'

@@ -100,7 +100,7 @@ router.post('/', auth, async (req, res) => {
   const goodWeight = bucketRows.reduce((sum, row) => sum + (row.good_weight || 0), 0);
   const badWeight = bucketRows.reduce((sum, row) => sum + (row.bad_weight || 0), 0);
   const wet_weight = goodWeight + badWeight;
-  const bag_count = 0;
+  const bag_count = bucketRows.length;
   const bucket_details = JSON.stringify(bucketRows);
 
   try {
