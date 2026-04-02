@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
 
 const BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
-  .flatMap(letter => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
+  .flatMap((letter) => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
+
+const MAX_ACTIVE_BATCHES_PER_BOX = 2;
 
 export default function Fermentation() {
   const [batches, setBatches] = useState([]);
@@ -36,7 +38,8 @@ export default function Fermentation() {
   const activeBoxes = fermentations
     .filter((f) => f.status === 'active')
     .reduce((map, f) => {
-      map[f.box_id] = f;
+      if (!map[f.box_id]) map[f.box_id] = [];
+      map[f.box_id].push(f);
       return map;
     }, {});
 
@@ -82,7 +85,7 @@ export default function Fermentation() {
     <div>
       <div className="page-header">
         <h1>Fermentation</h1>
-        <p>Assign cocoa to fermentation boxes A1-E12 and track good/bad bean weights.</p>
+        <p>Assign cocoa to fermentation boxes A1-E12. Each box can now hold up to two active batches.</p>
       </div>
 
       <div className="grid-2">
@@ -107,11 +110,15 @@ export default function Fermentation() {
               <select name="box_id" value={form.box_id} onChange={handle} required>
                 <option value="">Select box...</option>
                 {BOXES.map((box) => {
-                  const occupied = activeBoxes[box];
+                  const activeAssignments = activeBoxes[box] || [];
+                  const occupiedCount = activeAssignments.length;
+                  const disabled = occupiedCount >= MAX_ACTIVE_BATCHES_PER_BOX;
+
                   return (
-                    <option key={box} value={box} disabled={Boolean(occupied)}>
+                    <option key={box} value={box} disabled={disabled}>
                       {box}
-                      {occupied ? ` - occupied by ${occupied.batch_code}` : ''}
+                      {occupiedCount > 0 ? ` - ${occupiedCount}/${MAX_ACTIVE_BATCHES_PER_BOX} used` : ''}
+                      {occupiedCount > 0 ? ` (${activeAssignments.map((item) => item.batch_code).join(', ')})` : ''}
                     </option>
                   );
                 })}
@@ -154,28 +161,38 @@ export default function Fermentation() {
             <h2>Box Grid</h2>
             <div className="box-grid box-grid-12">
               {BOXES.map((box) => {
-                const active = activeBoxes[box];
+                const activeAssignments = activeBoxes[box] || [];
+                const occupiedCount = activeAssignments.length;
+                const isFull = occupiedCount >= MAX_ACTIVE_BATCHES_PER_BOX;
+                const isPartiallyUsed = occupiedCount > 0 && !isFull;
+
                 return (
                   <div
                     key={box}
                     style={{
-                      background: active ? '#f8d7da' : '#d4edda',
-                      color: active ? '#842029' : '#0f5132',
+                      background: isFull ? '#f8d7da' : isPartiallyUsed ? '#fff3cd' : '#d4edda',
+                      color: isFull ? '#842029' : isPartiallyUsed ? '#856404' : '#0f5132',
                       borderRadius: 6,
                       padding: '10px 8px',
                       textAlign: 'center',
                       fontSize: '0.8rem',
                       fontWeight: 700,
-                      minHeight: 72,
+                      minHeight: 92,
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'center',
+                      gap: 4,
                     }}
                   >
                     <div>{box}</div>
-                    <div style={{ fontSize: '0.75rem', marginTop: 4 }}>
-                      {active ? `${active.batch_code}` : 'Free'}
+                    <div style={{ fontSize: '0.72rem' }}>
+                      {occupiedCount === 0 ? 'Free' : `${occupiedCount}/${MAX_ACTIVE_BATCHES_PER_BOX} used`}
                     </div>
+                    {activeAssignments.map((item) => (
+                      <div key={item.id} style={{ fontSize: '0.68rem', wordBreak: 'break-word' }}>
+                        {item.batch_code}
+                      </div>
+                    ))}
                   </div>
                 );
               })}

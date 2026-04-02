@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
+const MAX_ACTIVE_BATCHES_PER_BOX = 2;
 
 const VALID_BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
   .flatMap(letter => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
@@ -59,8 +60,8 @@ router.post('/', auth, async (req, res) => {
       'SELECT batch_id FROM fermentation WHERE box_id = $1 AND status = $2',
       [box, 'active']
     );
-    if (occupied.rows.length) {
-      return res.status(409).json({ error: `Box ${box} is already occupied by another batch` });
+    if (occupied.rows.length >= MAX_ACTIVE_BATCHES_PER_BOX) {
+      return res.status(409).json({ error: `Box ${box} already has ${MAX_ACTIVE_BATCHES_PER_BOX} active batches` });
     }
 
     const duplicate = await pool.query(
