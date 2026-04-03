@@ -17,6 +17,7 @@ import Drying from './pages/Drying';
 import Moisture from './pages/Moisture';
 import Packing from './pages/Packing';
 import Trace from './pages/Trace';
+import FarmerExport from './pages/FarmerExport';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="drying" element={<Drying />} />
             <Route path="moisture" element={<Moisture />} />
             <Route path="packing" element={<Packing />} />
+            <Route path="farmer-export" element={<FarmerExport />} />
           </Route>
         </Routes>
       </BrowserRouter>
