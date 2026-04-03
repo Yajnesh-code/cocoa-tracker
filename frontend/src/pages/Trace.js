@@ -27,6 +27,21 @@ function getBucketDetails(breaking) {
   }
 }
 
+function normalizeFermentation(item) {
+  return {
+    ...item,
+    good_box_id: item.good_box_id || (!item.bad_box_id ? item.box_id : ''),
+    bad_box_id: item.bad_box_id || '',
+  };
+}
+
+function formatFermentationBoxes(item) {
+  const parts = [];
+  if (item.good_box_id) parts.push(`Good beans: ${item.good_box_id}`);
+  if (item.bad_box_id) parts.push(`Bad beans: ${item.bad_box_id}`);
+  return parts.join(' | ') || 'No box assigned';
+}
+
 export default function Trace() {
   const { batch_id } = useParams();
   const [data, setData] = useState(null);
@@ -60,10 +75,14 @@ export default function Trace() {
   }
 
   const { batch, breaking, fermentation, transfers, drying, moisture_logs, packing } = data;
+  const normalizedFermentation = fermentation.map(normalizeFermentation);
   const isPacked = Boolean(packing);
   const exportUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/trace/${batch.id}/export`;
   const qrUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/trace/${batch.id}/qrcode`;
-  const activeBoxes = fermentation?.filter((item) => item.status === 'active').map((item) => item.box_id).join(', ') || 'None';
+  const activeBoxes = normalizedFermentation
+    .filter((item) => item.status === 'active')
+    .map((item) => formatFermentationBoxes(item))
+    .join(' | ') || 'None';
   const bucketDetails = getBucketDetails(breaking);
   const handlePrint = () => window.print();
   const totalCollectedWeight = Number(batch.pod_weight || 0) + Number(batch.bad_pod_weight || 0);
@@ -226,12 +245,12 @@ export default function Trace() {
               </div>
             )}
 
-            {fermentation && fermentation.length > 0 && (
+            {normalizedFermentation && normalizedFermentation.length > 0 && (
               <div className="timeline-item">
                 <h4>Fermentation</h4>
-                {fermentation.map((item) => (
-                  <p key={item.id || `${item.box_id}-${item.start_date}`}>
-                    Box: {item.box_id} | Start: {formatDate(item.start_date)}
+                {normalizedFermentation.map((item) => (
+                  <p key={item.id || `${item.good_box_id}-${item.bad_box_id}-${item.start_date}`}>
+                    {formatFermentationBoxes(item)} | Start: {formatDate(item.start_date)}
                     {item.end_date && ` | End: ${formatDate(item.end_date)}`}
                     {' | '}Status: <span className={`badge badge-${item.status}`}>{item.status}</span>
                     {item.good_weight != null && ` | Good: ${formatWeightValue(item.good_weight)} kg`}
@@ -245,8 +264,8 @@ export default function Trace() {
               <div className="timeline-item">
                 <h4>Box Transfers ({transfers.length})</h4>
                 {transfers.map((item) => (
-                  <p key={item.id || `${item.from_box}-${item.to_box}-${item.transfer_date}`}>
-                    {item.from_box} to {item.to_box} on {formatDate(item.transfer_date)}
+                  <p key={item.id || `${item.bean_type}-${item.from_box}-${item.to_box}-${item.transfer_date}`}>
+                    {(item.bean_type === 'bad' ? 'Bad beans' : 'Good beans')} moved from {item.from_box} to {item.to_box} on {formatDate(item.transfer_date)}
                   </p>
                 ))}
               </div>
@@ -354,16 +373,16 @@ export default function Trace() {
                 </div>
               )}
 
-              {fermentation && fermentation.length > 0 && (
+              {normalizedFermentation && normalizedFermentation.length > 0 && (
                 <div className="print-stage-card">
                   <div className="print-stage-head">
                     <div className="print-stage-name">Fermentation</div>
-                    <div className="print-stage-meta">{fermentation.length} record(s)</div>
+                    <div className="print-stage-meta">{normalizedFermentation.length} record(s)</div>
                   </div>
                   <div className="print-inline-list">
-                    {fermentation.map((item) => (
-                      <div className="print-inline-row" key={item.id || `${item.box_id}-${item.start_date}`}>
-                        <span>{item.box_id} | {formatDate(item.start_date)}{item.end_date ? ` to ${formatDate(item.end_date)}` : ''}</span>
+                    {normalizedFermentation.map((item) => (
+                      <div className="print-inline-row" key={item.id || `${item.good_box_id}-${item.bad_box_id}-${item.start_date}`}>
+                        <span>{formatFermentationBoxes(item)} | {formatDate(item.start_date)}{item.end_date ? ` to ${formatDate(item.end_date)}` : ''}</span>
                         <strong>{item.status}</strong>
                       </div>
                     ))}
@@ -379,8 +398,8 @@ export default function Trace() {
                   </div>
                   <div className="print-inline-list">
                     {transfers.map((item) => (
-                      <div className="print-inline-row" key={item.id || `${item.from_box}-${item.to_box}-${item.transfer_date}`}>
-                        <span>{item.from_box} to {item.to_box}</span>
+                      <div className="print-inline-row" key={item.id || `${item.bean_type}-${item.from_box}-${item.to_box}-${item.transfer_date}`}>
+                        <span>{item.bean_type === 'bad' ? 'Bad beans' : 'Good beans'}: {item.from_box} to {item.to_box}</span>
                         <strong>{formatDate(item.transfer_date)}</strong>
                       </div>
                     ))}

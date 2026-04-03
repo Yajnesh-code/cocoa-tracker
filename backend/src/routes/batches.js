@@ -301,8 +301,12 @@ router.get('/export/monthly', auth, async (req, res) => {
       LEFT JOIN drying dry ON dry.batch_id = b.id
       LEFT JOIN packing pack ON pack.batch_id = b.id
       LEFT JOIN (
-        SELECT batch_id, STRING_AGG(box_id, ', ' ORDER BY box_id) AS boxes
-        FROM fermentation
+        SELECT batch_id, STRING_AGG(DISTINCT box_name, ', ' ORDER BY box_name) AS boxes
+        FROM (
+          SELECT batch_id, UNNEST(ARRAY[good_box_id, bad_box_id, box_id]) AS box_name
+          FROM fermentation
+        ) fer_boxes
+        WHERE box_name IS NOT NULL
         GROUP BY batch_id
       ) fer ON fer.batch_id = b.id
       LEFT JOIN (

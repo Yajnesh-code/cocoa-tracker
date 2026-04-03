@@ -68,6 +68,8 @@ async function initDB() {
         id SERIAL PRIMARY KEY,
         batch_id INTEGER REFERENCES batches(id) ON DELETE CASCADE,
         box_id VARCHAR(10) NOT NULL,
+        good_box_id VARCHAR(10),
+        bad_box_id VARCHAR(10),
         good_weight NUMERIC(10,2),
         bad_weight NUMERIC(10,2),
         start_date DATE NOT NULL,
@@ -76,18 +78,26 @@ async function initDB() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
       ALTER TABLE fermentation DROP CONSTRAINT IF EXISTS fermentation_batch_id_key;
+      ALTER TABLE fermentation ADD COLUMN IF NOT EXISTS good_box_id VARCHAR(10);
+      ALTER TABLE fermentation ADD COLUMN IF NOT EXISTS bad_box_id VARCHAR(10);
       ALTER TABLE fermentation ADD COLUMN IF NOT EXISTS good_weight NUMERIC(10,2);
       ALTER TABLE fermentation ADD COLUMN IF NOT EXISTS bad_weight NUMERIC(10,2);
+      UPDATE fermentation
+      SET good_box_id = COALESCE(good_box_id, box_id)
+      WHERE good_box_id IS NULL AND bad_box_id IS NULL;
 
       -- TRANSFERS
       CREATE TABLE IF NOT EXISTS transfers (
         id SERIAL PRIMARY KEY,
         batch_id INTEGER REFERENCES batches(id) ON DELETE CASCADE,
+        bean_type VARCHAR(10) NOT NULL DEFAULT 'good',
         from_box VARCHAR(10) NOT NULL,
         to_box VARCHAR(10) NOT NULL,
         transfer_date DATE NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+      ALTER TABLE transfers ADD COLUMN IF NOT EXISTS bean_type VARCHAR(10) NOT NULL DEFAULT 'good';
+      UPDATE transfers SET bean_type = 'good' WHERE bean_type IS NULL;
 
       -- DRYING
       CREATE TABLE IF NOT EXISTS drying (

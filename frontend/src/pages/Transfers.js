@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
 
 const BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
@@ -6,9 +6,17 @@ const BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row
 
 const MAX_ACTIVE_BATCHES_PER_BOX = 2;
 
+function normalizeFermentation(record) {
+  return {
+    ...record,
+    good_box_id: record.good_box_id || (!record.bad_box_id ? record.box_id : ''),
+    bad_box_id: record.bad_box_id || '',
+  };
+}
+
 export default function Transfers() {
   const [batches, setBatches] = useState([]);
-  const [form, setForm] = useState({ batch_id: '', from_box: '', to_box: '', transfer_date: '' });
+  const [form, setForm] = useState({ batch_id: '', bean_type: 'good', from_box: '', to_box: '', transfer_date: '' });
   const [transfers, setTransfers] = useState([]);
   const [fermentations, setFermentations] = useState([]);
   const [currentFermentation, setCurrentFermentation] = useState([]);
@@ -19,7 +27,7 @@ export default function Transfers() {
   const refreshFermentations = async () => {
     try {
       const result = await api.get('/fermentation');
-      setFermentations(result.data);
+      setFermentations(result.data.map(normalizeFermentation));
     } catch (_) {
       setFermentations([]);
     }
@@ -30,30 +38,41 @@ export default function Transfers() {
     refreshFermentations();
   }, []);
 
-  const handle = (e) => {
+  const loadBatchDetails = async (batchId) => {
+    if (!batchId) {
+      setTransfers([]);
+      setCurrentFermentation([]);
+      return;
+    }
+
+    try {
+      const [transferRes, fermentationRes] = await Promise.all([
+        api.get(`/transfers/${batchId}`),
+        api.get(`/fermentation/${batchId}`),
+      ]);
+      setTransfers(transferRes.data);
+      setCurrentFermentation(fermentationRes.data.map(normalizeFermentation));
+    } catch (_) {
+      setTransfers([]);
+      setCurrentFermentation([]);
+    }
+  };
+
+  const handle = async (e) => {
     const updated = { ...form, [e.target.name]: e.target.value };
-    setForm(updated);
 
     if (e.target.name === 'batch_id') {
-      if (!e.target.value) {
-        setTransfers([]);
-        setCurrentFermentation([]);
-        return;
-      }
-
-      Promise.all([
-        api.get(`/transfers/${e.target.value}`),
-        api.get(`/fermentation/${e.target.value}`),
-      ])
-        .then(([transferRes, fermentationRes]) => {
-          setTransfers(transferRes.data);
-          setCurrentFermentation(fermentationRes.data);
-        })
-        .catch(() => {
-          setTransfers([]);
-          setCurrentFermentation([]);
-        });
+      updated.from_box = '';
+      updated.to_box = '';
+      await loadBatchDetails(e.target.value);
     }
+
+    if (e.target.name === 'bean_type') {
+      updated.from_box = '';
+      updated.to_box = '';
+    }
+
+    setForm(updated);
   };
 
   const submit = async (e) => {
@@ -65,12 +84,7 @@ export default function Transfers() {
       await api.post('/transfers', form);
       setSuccess('Transfer recorded!');
       await refreshFermentations();
-      const [transferRes, fermentationRes] = await Promise.all([
-        api.get(`/transfers/${form.batch_id}`),
-        api.get(`/fermentation/${form.batch_id}`),
-      ]);
-      setTransfers(transferRes.data);
-      setCurrentFermentation(fermentationRes.data);
+      await loadBatchDetails(form.batch_id);
       setForm((f) => ({ ...f, from_box: '', to_box: '', transfer_date: '' }));
     } catch (err) {
       setError(err.response?.data?.error || 'Failed');
@@ -81,21 +95,35 @@ export default function Transfers() {
 
   const formatDate = (date) => (date ? date.slice(0, 10) : '');
 
-  const occupiedBoxes = fermentations
-    .filter((f) => f.status === 'active')
-    .reduce((map, f) => {
-      if (!map[f.box_id]) map[f.box_id] = [];
-      map[f.box_id].push(f);
-      return map;
-    }, {});
+  const occupiedBoxes = useMemo(
+    () => fermentations
+      .filter((item) => item.status === 'active')
+      .reduce((map, item) => {
+        [
+          item.good_box_id ? { box: item.good_box_id, label: 'Good beans' } : null,
+          item.bad_box_id ? { box: item.bad_box_id, label: 'Bad beans' } : null,
+        ]
+          .filter(Boolean)
+          .forEach((entry) => {
+            if (!map[entry.box]) map[entry.box] = [];
+            map[entry.box].push({ ...item, beanLabel: entry.label });
+          });
+        return map;
+      }, {}),
+    [fermentations]
+  );
 
-  const batchBoxes = currentFermentation
-    .filter((f) => f.status === 'active')
-    .reduce((map, f) => {
-      map[f.box_id] = f;
-      return map;
-    }, {});
+  const activeLocations = useMemo(() => {
+    const current = currentFermentation.filter((item) => item.status === 'active');
+    const slots = [];
+    current.forEach((item) => {
+      if (item.good_box_id) slots.push({ type: 'good', label: 'Good beans', box: item.good_box_id });
+      if (item.bad_box_id) slots.push({ type: 'bad', label: 'Bad beans', box: item.bad_box_id });
+    });
+    return slots;
+  }, [currentFermentation]);
 
+  const fromOptions = activeLocations.filter((item) => item.type === form.bean_type);
   const selectedBatch = batches.find((b) => String(b.id) === String(form.batch_id));
   const qrcodeUrl = selectedBatch ? `${window.location.origin}/trace/${selectedBatch.id}` : '';
   const excelUrl = selectedBatch ? `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/trace/${selectedBatch.id}/export` : '';
@@ -104,7 +132,7 @@ export default function Transfers() {
     <div>
       <div className="page-header">
         <h1>Box Transfers</h1>
-        <p>Record cocoa movement between fermentation boxes. Each box can hold up to two active batches.</p>
+        <p>Move good beans and bad beans separately between fermentation boxes. Each box can hold up to two active batches.</p>
       </div>
 
       <div className="grid-2">
@@ -125,17 +153,24 @@ export default function Transfers() {
               </select>
             </div>
             <div className="form-group">
+              <label>Bean Type *</label>
+              <select name="bean_type" value={form.bean_type} onChange={handle} required>
+                <option value="good">Good beans</option>
+                <option value="bad">Bad beans</option>
+              </select>
+            </div>
+            <div className="form-group">
               <label>From Box *</label>
               <select name="from_box" value={form.from_box} onChange={handle} required>
                 <option value="">Select...</option>
-                {Object.keys(batchBoxes).length === 0 ? (
+                {fromOptions.length === 0 ? (
                   <option value="" disabled>
-                    No active box for this batch
+                    No active {form.bean_type} beans box for this batch
                   </option>
                 ) : (
-                  Object.keys(batchBoxes).map((box) => (
-                    <option key={box} value={box}>
-                      {box}
+                  fromOptions.map((item) => (
+                    <option key={`${item.type}-${item.box}`} value={item.box}>
+                      {item.box} - {item.label}
                     </option>
                   ))
                 )}
@@ -147,14 +182,16 @@ export default function Transfers() {
                 <option value="">Select...</option>
                 {BOXES.filter((box) => box !== form.from_box).map((box) => {
                   const activeAssignments = occupiedBoxes[box] || [];
-                  const occupiedCount = activeAssignments.length;
+                  const occupiedCount = new Set(activeAssignments.map((item) => item.batch_id)).size;
                   const disabled = occupiedCount >= MAX_ACTIVE_BATCHES_PER_BOX;
 
                   return (
                     <option key={box} value={box} disabled={disabled}>
                       {box}
                       {occupiedCount > 0 ? ` - ${occupiedCount}/${MAX_ACTIVE_BATCHES_PER_BOX} used` : ''}
-                      {occupiedCount > 0 ? ` (${activeAssignments.map((item) => item.batch_code).join(', ')})` : ''}
+                      {activeAssignments.length > 0
+                        ? ` (${activeAssignments.map((item) => `${item.batch_code} ${item.beanLabel}`).join(', ')})`
+                        : ''}
                     </option>
                   );
                 })}
@@ -183,6 +220,7 @@ export default function Transfers() {
             <table>
               <thead>
                 <tr>
+                  <th>Bean Type</th>
                   <th>From</th>
                   <th>To</th>
                   <th>Date</th>
@@ -191,13 +229,14 @@ export default function Transfers() {
               <tbody>
                 {transfers.length === 0 ? (
                   <tr>
-                    <td colSpan={3} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
                       Select a batch to view transfers
                     </td>
                   </tr>
                 ) : (
                   transfers.map((t) => (
                     <tr key={t.id}>
+                      <td><strong>{t.bean_type === 'bad' ? 'Bad beans' : 'Good beans'}</strong></td>
                       <td><strong>{t.from_box}</strong></td>
                       <td><strong>{t.to_box}</strong></td>
                       <td>{t.transfer_date?.slice(0, 10)}</td>
@@ -213,7 +252,7 @@ export default function Transfers() {
             <div className="box-grid box-grid-12">
               {BOXES.map((box) => {
                 const activeAssignments = occupiedBoxes[box] || [];
-                const occupiedCount = activeAssignments.length;
+                const occupiedCount = new Set(activeAssignments.map((item) => item.batch_id)).size;
                 const highlight = box === form.from_box || box === form.to_box;
                 const isFull = occupiedCount >= MAX_ACTIVE_BATCHES_PER_BOX;
                 const isPartiallyUsed = occupiedCount > 0 && !isFull;
@@ -230,7 +269,7 @@ export default function Transfers() {
                       textAlign: 'center',
                       fontSize: '0.8rem',
                       fontWeight: 700,
-                      minHeight: 92,
+                      minHeight: 104,
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'center',
@@ -242,8 +281,8 @@ export default function Transfers() {
                       {occupiedCount === 0 ? 'Free' : `${occupiedCount}/${MAX_ACTIVE_BATCHES_PER_BOX} used`}
                     </div>
                     {activeAssignments.map((item) => (
-                      <div key={item.id} style={{ fontSize: '0.68rem', wordBreak: 'break-word' }}>
-                        {item.batch_code}
+                      <div key={`${item.id}-${item.beanLabel}`} style={{ fontSize: '0.68rem', wordBreak: 'break-word' }}>
+                        {item.batch_code} ({item.beanLabel === 'Good beans' ? 'Good' : 'Bad'})
                       </div>
                     ))}
                     {highlight ? (
@@ -268,7 +307,7 @@ export default function Transfers() {
               </div>
               <h2 style={{ marginBottom: 8 }}>Transfer and Traceability Overview</h2>
               <p style={{ color: 'var(--text-muted)', maxWidth: 520 }}>
-                This summary presents the current storage position, movement history, and direct Excel export for the selected batch only.
+                This summary presents the current storage position for good beans and bad beans, movement history, and direct Excel export for the selected batch only.
               </p>
             </div>
             <div style={{ padding: '6px 12px', borderRadius: 999, background: '#eef6f0', color: 'var(--primary-dark)', fontWeight: 700, fontSize: '0.82rem' }}>
@@ -283,8 +322,12 @@ export default function Transfers() {
                   <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--primary-dark)' }}>{selectedBatch.batch_code}</div>
                 </div>
                 <div style={{ padding: 14, border: '1px solid var(--border)', borderRadius: 12, background: '#fbfdfb' }}>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Active Box</div>
-                  <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--primary-dark)' }}>{Object.keys(batchBoxes).join(', ') || 'None'}</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Current Boxes</div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--primary-dark)' }}>
+                    {activeLocations.length > 0
+                      ? activeLocations.map((item) => `${item.label}: ${item.box}`).join(' | ')
+                      : 'None'}
+                  </div>
                 </div>
               </div>
               <div className="summary-pair-grid">
@@ -306,7 +349,7 @@ export default function Transfers() {
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
                     <span>Current Position</span>
-                    <strong>{Object.keys(batchBoxes).join(', ') || 'None'}</strong>
+                    <strong>{activeLocations.length > 0 ? activeLocations.map((item) => `${item.label}: ${item.box}`).join(' | ') : 'None'}</strong>
                   </div>
                 </div>
               </div>
@@ -314,7 +357,7 @@ export default function Transfers() {
                 <div style={{ padding: 16, borderRadius: 12, background: '#1b4332', color: '#fff' }}>
                   <div style={{ fontSize: '0.78rem', opacity: 0.8, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Latest Transfer</div>
                   <div style={{ fontSize: '1rem', fontWeight: 700 }}>
-                    {transfers[transfers.length - 1].from_box} to {transfers[transfers.length - 1].to_box}
+                    {transfers[transfers.length - 1].bean_type === 'bad' ? 'Bad beans' : 'Good beans'}: {transfers[transfers.length - 1].from_box} to {transfers[transfers.length - 1].to_box}
                   </div>
                   <div style={{ marginTop: 4, fontSize: '0.88rem', opacity: 0.9 }}>
                     Recorded on {formatDate(transfers[transfers.length - 1].transfer_date)}

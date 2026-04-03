@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
 
 const BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
@@ -6,10 +6,18 @@ const BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row
 
 const MAX_ACTIVE_BATCHES_PER_BOX = 2;
 
+function normalizeFermentation(record) {
+  return {
+    ...record,
+    good_box_id: record.good_box_id || (!record.bad_box_id ? record.box_id : ''),
+    bad_box_id: record.bad_box_id || '',
+  };
+}
+
 export default function Fermentation() {
   const [batches, setBatches] = useState([]);
   const [fermentations, setFermentations] = useState([]);
-  const [form, setForm] = useState({ batch_id: '', box_id: '', start_date: '' });
+  const [form, setForm] = useState({ batch_id: '', good_box_id: '', bad_box_id: '', start_date: '' });
   const [completeForm, setCompleteForm] = useState({ batch_id: '', end_date: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -22,8 +30,8 @@ export default function Fermentation() {
         api.get('/fermentation'),
       ]);
       setBatches(batchRes.data);
-      setFermentations(fermentationRes.data);
-    } catch (err) {
+      setFermentations(fermentationRes.data.map(normalizeFermentation));
+    } catch (_) {
       setError('Unable to load fermentation data');
     }
   };
@@ -35,13 +43,23 @@ export default function Fermentation() {
   const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value });
   const handleC = (e) => setCompleteForm({ ...completeForm, [e.target.name]: e.target.value });
 
-  const activeBoxes = fermentations
-    .filter((f) => f.status === 'active')
-    .reduce((map, f) => {
-      if (!map[f.box_id]) map[f.box_id] = [];
-      map[f.box_id].push(f);
-      return map;
-    }, {});
+  const activeBoxes = useMemo(
+    () => fermentations
+      .filter((item) => item.status === 'active')
+      .reduce((map, item) => {
+        [
+          item.good_box_id ? { box: item.good_box_id, label: 'Good beans' } : null,
+          item.bad_box_id ? { box: item.bad_box_id, label: 'Bad beans' } : null,
+        ]
+          .filter(Boolean)
+          .forEach((entry) => {
+            if (!map[entry.box]) map[entry.box] = [];
+            map[entry.box].push({ ...item, beanLabel: entry.label });
+          });
+        return map;
+      }, {}),
+    [fermentations]
+  );
 
   const submit = async (e) => {
     e.preventDefault();
@@ -51,12 +69,13 @@ export default function Fermentation() {
     try {
       await api.post('/fermentation', {
         batch_id: form.batch_id,
-        box_id: form.box_id,
+        good_box_id: form.good_box_id || null,
+        bad_box_id: form.bad_box_id || null,
         start_date: form.start_date,
       });
       setSuccess('Fermentation started!');
-      setForm({ batch_id: '', box_id: '', start_date: '' });
-      refresh();
+      setForm({ batch_id: '', good_box_id: '', bad_box_id: '', start_date: '' });
+      await refresh();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed');
     } finally {
@@ -73,7 +92,7 @@ export default function Fermentation() {
       await api.patch(`/fermentation/${completeForm.batch_id}/complete`, { end_date: completeForm.end_date });
       setSuccess('Fermentation completed!');
       setCompleteForm({ batch_id: '', end_date: '' });
-      refresh();
+      await refresh();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed');
     } finally {
@@ -81,11 +100,29 @@ export default function Fermentation() {
     }
   };
 
+  const renderBoxOptions = (selectedOtherBox) => (
+    BOXES.map((box) => {
+      const activeAssignments = activeBoxes[box] || [];
+      const occupiedCount = new Set(activeAssignments.map((item) => item.batch_id)).size;
+      const disabled = occupiedCount >= MAX_ACTIVE_BATCHES_PER_BOX && box !== selectedOtherBox;
+
+      return (
+        <option key={box} value={box} disabled={disabled}>
+          {box}
+          {occupiedCount > 0 ? ` - ${occupiedCount}/${MAX_ACTIVE_BATCHES_PER_BOX} used` : ''}
+          {activeAssignments.length > 0
+            ? ` (${activeAssignments.map((item) => `${item.batch_code} ${item.beanLabel}`).join(', ')})`
+            : ''}
+        </option>
+      );
+    })
+  );
+
   return (
     <div>
       <div className="page-header">
         <h1>Fermentation</h1>
-        <p>Assign cocoa to fermentation boxes A1-E12. Each box can now hold up to two active batches.</p>
+        <p>Assign good beans and bad beans for the same batch into fermentation boxes A1-E12. Each box can hold up to two active batches.</p>
       </div>
 
       <div className="grid-2">
@@ -106,22 +143,17 @@ export default function Fermentation() {
               </select>
             </div>
             <div className="form-group">
-              <label>Box ID (A1-E12) *</label>
-              <select name="box_id" value={form.box_id} onChange={handle} required>
-                <option value="">Select box...</option>
-                {BOXES.map((box) => {
-                  const activeAssignments = activeBoxes[box] || [];
-                  const occupiedCount = activeAssignments.length;
-                  const disabled = occupiedCount >= MAX_ACTIVE_BATCHES_PER_BOX;
-
-                  return (
-                    <option key={box} value={box} disabled={disabled}>
-                      {box}
-                      {occupiedCount > 0 ? ` - ${occupiedCount}/${MAX_ACTIVE_BATCHES_PER_BOX} used` : ''}
-                      {occupiedCount > 0 ? ` (${activeAssignments.map((item) => item.batch_code).join(', ')})` : ''}
-                    </option>
-                  );
-                })}
+              <label>Good Beans Box</label>
+              <select name="good_box_id" value={form.good_box_id} onChange={handle}>
+                <option value="">Not assigned</option>
+                {renderBoxOptions(form.bad_box_id)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Bad Beans Box</label>
+              <select name="bad_box_id" value={form.bad_box_id} onChange={handle}>
+                <option value="">Not assigned</option>
+                {renderBoxOptions(form.good_box_id)}
               </select>
             </div>
             <div className="form-group">
@@ -162,7 +194,7 @@ export default function Fermentation() {
             <div className="box-grid box-grid-12">
               {BOXES.map((box) => {
                 const activeAssignments = activeBoxes[box] || [];
-                const occupiedCount = activeAssignments.length;
+                const occupiedCount = new Set(activeAssignments.map((item) => item.batch_id)).size;
                 const isFull = occupiedCount >= MAX_ACTIVE_BATCHES_PER_BOX;
                 const isPartiallyUsed = occupiedCount > 0 && !isFull;
 
@@ -177,7 +209,7 @@ export default function Fermentation() {
                       textAlign: 'center',
                       fontSize: '0.8rem',
                       fontWeight: 700,
-                      minHeight: 92,
+                      minHeight: 108,
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'center',
@@ -189,8 +221,8 @@ export default function Fermentation() {
                       {occupiedCount === 0 ? 'Free' : `${occupiedCount}/${MAX_ACTIVE_BATCHES_PER_BOX} used`}
                     </div>
                     {activeAssignments.map((item) => (
-                      <div key={item.id} style={{ fontSize: '0.68rem', wordBreak: 'break-word' }}>
-                        {item.batch_code}
+                      <div key={`${item.id}-${item.beanLabel}`} style={{ fontSize: '0.68rem', wordBreak: 'break-word' }}>
+                        {item.batch_code} ({item.beanLabel === 'Good beans' ? 'Good' : 'Bad'})
                       </div>
                     ))}
                   </div>

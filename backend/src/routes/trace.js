@@ -63,8 +63,20 @@ function getBucketDetails(breaking) {
   }
 }
 
+function normalizeFermentationRecord(record) {
+  const goodBox = record.good_box_id || (!record.bad_box_id ? record.box_id : null);
+  const badBox = record.bad_box_id || null;
+
+  return {
+    ...record,
+    good_box_id: goodBox,
+    bad_box_id: badBox,
+  };
+}
+
 function buildBatchTraceSections(items) {
   return items.map(({ batch, breaking, fermentation, transfers, drying, moisture_logs, packing }, index) => {
+    const normalizedFermentation = fermentation.map(normalizeFermentationRecord);
     const bucketDetails = getBucketDetails(breaking);
     const overviewRows = [
       { label: 'Batch Code', value: batch.batch_code },
@@ -87,14 +99,16 @@ function buildBatchTraceSections(items) {
         ]
       : [];
 
-    const fermentationRows = fermentation.map((item) => ({
-      box: item.box_id,
+    const fermentationRows = normalizedFermentation.map((item) => ({
+      good_box: item.good_box_id || 'Not assigned',
+      bad_box: item.bad_box_id || 'Not assigned',
       start_date: formatDate(item.start_date),
       end_date: formatDate(item.end_date),
       status: item.status,
     }));
 
     const transferRows = transfers.map((item) => ({
+      bean_type: item.bean_type === 'bad' ? 'Bad beans' : 'Good beans',
       from_box: item.from_box,
       to_box: item.to_box,
       transfer_date: formatDate(item.transfer_date),
@@ -158,7 +172,8 @@ function buildBatchTraceSections(items) {
         <table>
           <thead>
             <tr>
-              <th>Box</th>
+              <th>Good Beans Box</th>
+              <th>Bad Beans Box</th>
               <th>Start Date</th>
               <th>End Date</th>
               <th>Status</th>
@@ -166,7 +181,8 @@ function buildBatchTraceSections(items) {
           </thead>
           <tbody>
             ${renderListRows(fermentationRows, [
-              { key: 'box' },
+              { key: 'good_box' },
+              { key: 'bad_box' },
               { key: 'start_date' },
               { key: 'end_date' },
               { key: 'status' },
@@ -180,6 +196,7 @@ function buildBatchTraceSections(items) {
         <table>
           <thead>
             <tr>
+              <th>Bean Type</th>
               <th>From Box</th>
               <th>To Box</th>
               <th>Transfer Date</th>
@@ -187,6 +204,7 @@ function buildBatchTraceSections(items) {
           </thead>
           <tbody>
             ${renderListRows(transferRows, [
+              { key: 'bean_type' },
               { key: 'from_box' },
               { key: 'to_box' },
               { key: 'transfer_date' },
@@ -250,6 +268,7 @@ function buildBatchTraceSections(items) {
 
 function buildExcelHtmlReport(data, batchId) {
   const { batch, breaking, fermentation, transfers, drying, moisture_logs, packing } = data;
+  const normalizedFermentation = fermentation.map(normalizeFermentationRecord);
   const logoUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/solemulelogo.png`;
   const bucketDetails = getBucketDetails(breaking);
   const overviewRows = [
@@ -273,14 +292,16 @@ function buildExcelHtmlReport(data, batchId) {
       ]
     : [];
 
-  const fermentationRows = fermentation.map((item) => ({
-    box: item.box_id,
+  const fermentationRows = normalizedFermentation.map((item) => ({
+    good_box: item.good_box_id || 'Not assigned',
+    bad_box: item.bad_box_id || 'Not assigned',
     start_date: formatDate(item.start_date),
     end_date: formatDate(item.end_date),
     status: item.status,
   }));
 
   const transferRows = transfers.map((item) => ({
+    bean_type: item.bean_type === 'bad' ? 'Bad beans' : 'Good beans',
     from_box: item.from_box,
     to_box: item.to_box,
     transfer_date: formatDate(item.transfer_date),
@@ -435,7 +456,8 @@ function buildExcelHtmlReport(data, batchId) {
           <table>
             <thead>
               <tr>
-                <th>Box</th>
+                <th>Good Beans Box</th>
+                <th>Bad Beans Box</th>
                 <th>Start Date</th>
                 <th>End Date</th>
                 <th>Status</th>
@@ -443,7 +465,8 @@ function buildExcelHtmlReport(data, batchId) {
             </thead>
             <tbody>
               ${renderListRows(fermentationRows, [
-                { key: 'box' },
+                { key: 'good_box' },
+                { key: 'bad_box' },
                 { key: 'start_date' },
                 { key: 'end_date' },
                 { key: 'status' },
@@ -457,6 +480,7 @@ function buildExcelHtmlReport(data, batchId) {
           <table>
             <thead>
               <tr>
+                <th>Bean Type</th>
                 <th>From Box</th>
                 <th>To Box</th>
                 <th>Transfer Date</th>
@@ -464,6 +488,7 @@ function buildExcelHtmlReport(data, batchId) {
             </thead>
             <tbody>
               ${renderListRows(transferRows, [
+                { key: 'bean_type' },
                 { key: 'from_box' },
                 { key: 'to_box' },
                 { key: 'transfer_date' },
@@ -576,7 +601,10 @@ async function fetchBatchTrace(batchId) {
   const [batch, breaking, fermentation, transfers, drying, moisture, packing] = await Promise.all([
     pool.query(`SELECT b.*, f.farmer_code, f.name AS farmer_name, f.location FROM batches b JOIN farmers f ON b.farmer_id = f.id WHERE b.id = $1`, [batchId]),
     pool.query('SELECT * FROM breaking WHERE batch_id = $1', [batchId]),
-    pool.query('SELECT * FROM fermentation WHERE batch_id = $1 ORDER BY box_id', [batchId]),
+    pool.query(
+      'SELECT * FROM fermentation WHERE batch_id = $1 ORDER BY COALESCE(good_box_id, bad_box_id, box_id)',
+      [batchId]
+    ),
     pool.query('SELECT * FROM transfers WHERE batch_id = $1 ORDER BY transfer_date', [batchId]),
     pool.query('SELECT * FROM drying WHERE batch_id = $1', [batchId]),
     pool.query('SELECT * FROM moisture_logs WHERE batch_id = $1 ORDER BY log_date', [batchId]),
@@ -648,7 +676,10 @@ router.get('/:batch_id', async (req, res) => {
     const [batch, breaking, fermentation, transfers, drying, moisture, packing] = await Promise.all([
       pool.query(`SELECT b.*, f.farmer_code, f.name AS farmer_name, f.location FROM batches b JOIN farmers f ON b.farmer_id = f.id WHERE b.id = $1`, [batch_id]),
       pool.query('SELECT * FROM breaking WHERE batch_id = $1', [batch_id]),
-      pool.query('SELECT * FROM fermentation WHERE batch_id = $1 ORDER BY box_id', [batch_id]),
+      pool.query(
+        'SELECT * FROM fermentation WHERE batch_id = $1 ORDER BY COALESCE(good_box_id, bad_box_id, box_id)',
+        [batch_id]
+      ),
       pool.query('SELECT * FROM transfers WHERE batch_id = $1 ORDER BY transfer_date', [batch_id]),
       pool.query('SELECT * FROM drying WHERE batch_id = $1', [batch_id]),
       pool.query('SELECT * FROM moisture_logs WHERE batch_id = $1 ORDER BY log_date', [batch_id]),
@@ -660,7 +691,7 @@ router.get('/:batch_id', async (req, res) => {
     const traceData = {
       batch: batch.rows[0],
       breaking: breaking.rows[0] || null,
-      fermentation: fermentation.rows,
+      fermentation: fermentation.rows.map(normalizeFermentationRecord),
       transfers: transfers.rows,
       drying: drying.rows[0] || null,
       moisture_logs: moisture.rows,
