@@ -92,8 +92,6 @@ function buildBatchTraceSections(items) {
       start_date: formatDate(item.start_date),
       end_date: formatDate(item.end_date),
       status: item.status,
-      good_weight: formatNumber(item.good_weight),
-      bad_weight: formatNumber(item.bad_weight),
     }));
 
     const transferRows = transfers.map((item) => ({
@@ -164,8 +162,6 @@ function buildBatchTraceSections(items) {
               <th>Start Date</th>
               <th>End Date</th>
               <th>Status</th>
-              <th>Good Beans</th>
-              <th>Bad Beans</th>
             </tr>
           </thead>
           <tbody>
@@ -174,8 +170,6 @@ function buildBatchTraceSections(items) {
               { key: 'start_date' },
               { key: 'end_date' },
               { key: 'status' },
-              { key: 'good_weight' },
-              { key: 'bad_weight' },
             ])}
           </tbody>
         </table>
@@ -284,8 +278,6 @@ function buildExcelHtmlReport(data, batchId) {
     start_date: formatDate(item.start_date),
     end_date: formatDate(item.end_date),
     status: item.status,
-    good_weight: formatNumber(item.good_weight),
-    bad_weight: formatNumber(item.bad_weight),
   }));
 
   const transferRows = transfers.map((item) => ({
@@ -447,8 +439,6 @@ function buildExcelHtmlReport(data, batchId) {
                 <th>Start Date</th>
                 <th>End Date</th>
                 <th>Status</th>
-                <th>Good Beans</th>
-                <th>Bad Beans</th>
               </tr>
             </thead>
             <tbody>
@@ -457,8 +447,6 @@ function buildExcelHtmlReport(data, batchId) {
                 { key: 'start_date' },
                 { key: 'end_date' },
                 { key: 'status' },
-                { key: 'good_weight' },
-                { key: 'bad_weight' },
               ])}
             </tbody>
           </table>
