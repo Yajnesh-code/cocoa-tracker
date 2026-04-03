@@ -50,9 +50,23 @@ function renderListRows(items, columns) {
     .join('');
 }
 
+function getBucketDetails(breaking) {
+  if (!breaking?.bucket_details) return [];
+
+  try {
+    const parsed = typeof breaking.bucket_details === 'string'
+      ? JSON.parse(breaking.bucket_details)
+      : breaking.bucket_details;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 function buildExcelHtmlReport(data, batchId) {
   const { batch, breaking, fermentation, transfers, drying, moisture_logs, packing } = data;
   const logoUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/solemulelogo.png`;
+  const bucketDetails = getBucketDetails(breaking);
   const overviewRows = [
     { label: 'Batch Code', value: batch.batch_code },
     { label: 'Farmer', value: batch.farmer_name },
@@ -93,6 +107,14 @@ function buildExcelHtmlReport(data, batchId) {
     day: `Day ${index + 1}`,
     moisture: `${formatNumber(item.moisture_pct)}%`,
     log_date: formatDate(item.log_date),
+  }));
+
+  const bucketRows = bucketDetails.map((item, index) => ({
+    bucket: `Bucket ${index + 1}`,
+    type: item.type === 'bad' ? 'Bad beans' : 'Good beans',
+    gross_weight: `${formatNumber(item.gross_weight)} kg`,
+    bucket_weight: `${formatNumber(item.bucket_weight)} kg`,
+    net_weight: `${formatNumber(item.good_weight ?? item.bad_weight)} kg`,
   }));
 
   return `
@@ -202,6 +224,30 @@ function buildExcelHtmlReport(data, batchId) {
         </div>
 
         <div class="section">
+          <div class="section-title">Bucket Breakdown</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Bucket</th>
+                <th>Type</th>
+                <th>Gross Weight</th>
+                <th>Empty Bucket Weight</th>
+                <th>Net Bean Weight</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${renderListRows(bucketRows, [
+                { key: 'bucket' },
+                { key: 'type' },
+                { key: 'gross_weight' },
+                { key: 'bucket_weight' },
+                { key: 'net_weight' },
+              ])}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section">
           <div class="section-title">Fermentation</div>
           <table>
             <thead>
@@ -210,6 +256,8 @@ function buildExcelHtmlReport(data, batchId) {
                 <th>Start Date</th>
                 <th>End Date</th>
                 <th>Status</th>
+                <th>Good Beans</th>
+                <th>Bad Beans</th>
               </tr>
             </thead>
             <tbody>
@@ -218,6 +266,8 @@ function buildExcelHtmlReport(data, batchId) {
                 { key: 'start_date' },
                 { key: 'end_date' },
                 { key: 'status' },
+                { key: 'good_weight' },
+                { key: 'bad_weight' },
               ])}
             </tbody>
           </table>

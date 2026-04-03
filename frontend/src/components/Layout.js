@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 const NAV = [
   { to: '/', icon: '\u{1F4CA}', label: 'Dashboard' },
   { to: '/farmers', icon: '\u{1F331}', label: 'Farmers' },
-  { to: '/farmer-export', icon: '\u{1F4C4}', label: 'Farmer Export' },
+  { to: '/farmer-export', icon: '\u{1F4C4}', label: 'Batch Export' },
   { to: '/batches', icon: '\u{1F4E6}', label: 'Pod Collection' },
   { to: '/breaking', icon: '\u{1F528}', label: 'Breaking' },
   { to: '/fermentation', icon: '\u{1F9EA}', label: 'Fermentation' },
