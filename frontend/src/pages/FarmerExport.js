@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../api/axios';
 
 export default function FarmerExport() {
   const [farmers, setFarmers] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [error, setError] = useState('');
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     api.get('/farmers')
@@ -18,10 +19,32 @@ export default function FarmerExport() {
     );
   };
 
-  const exportUrl = useMemo(() => {
-    if (selectedIds.length === 0) return '';
-    return `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/farmers/export/details?farmer_ids=${selectedIds.join(',')}`;
-  }, [selectedIds]);
+  const downloadExcel = async () => {
+    if (selectedIds.length === 0) return;
+
+    setError('');
+    setDownloading(true);
+
+    try {
+      const response = await api.get(`/farmers/export/details?farmer_ids=${selectedIds.join(',')}`, {
+        responseType: 'blob',
+      });
+
+      const blob = new Blob([response.data], { type: 'application/vnd.ms-excel' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'selected-farmers-batch-report.xls';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to download Excel sheet');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div>
@@ -37,15 +60,14 @@ export default function FarmerExport() {
           <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
             Selected farmers: <strong>{selectedIds.length}</strong>
           </div>
-          {selectedIds.length > 0 ? (
-            <a className="btn btn-primary" href={exportUrl} target="_blank" rel="noreferrer">
-              Download Excel Sheet
-            </a>
-          ) : (
-            <button type="button" className="btn btn-primary" disabled>
-              Download Excel Sheet
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={downloadExcel}
+            disabled={selectedIds.length === 0 || downloading}
+          >
+            {downloading ? 'Downloading...' : 'Download Excel Sheet'}
+          </button>
         </div>
 
         <div className="table-wrap">
