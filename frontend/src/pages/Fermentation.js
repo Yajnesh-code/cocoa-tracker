@@ -24,15 +24,12 @@ function normalizeFermentation(record) {
   };
 }
 
-function readMultiSelectValues(event) {
-  return Array.from(event.target.selectedOptions).map((option) => option.value);
-}
-
 export default function Fermentation() {
   const [batches, setBatches] = useState([]);
   const [fermentations, setFermentations] = useState([]);
   const [dryingRecords, setDryingRecords] = useState([]);
   const [form, setForm] = useState({ batch_id: '', good_box_ids: [], bad_box_ids: [], start_date: '' });
+  const [picker, setPicker] = useState({ good_box: '', bad_box: '' });
   const [completeForm, setCompleteForm] = useState({ batch_id: '', end_date: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -62,7 +59,7 @@ export default function Fermentation() {
   }, []);
 
   const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value });
-  const handleMulti = (e) => setForm({ ...form, [e.target.name]: readMultiSelectValues(e) });
+  const handlePicker = (e) => setPicker({ ...picker, [e.target.name]: e.target.value });
   const handleC = (e) => setCompleteForm({ ...completeForm, [e.target.name]: e.target.value });
 
   const activeBoxes = useMemo(
@@ -109,6 +106,7 @@ export default function Fermentation() {
       });
       setSuccess('Fermentation started!');
       setForm({ batch_id: '', good_box_ids: [], bad_box_ids: [], start_date: '' });
+      setPicker({ good_box: '', bad_box: '' });
       await refresh();
     } catch (err) {
       setError((err.response && err.response.data && err.response.data.error) || 'Failed');
@@ -132,6 +130,70 @@ export default function Fermentation() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const addBox = (type) => {
+    const pickerKey = type === 'good' ? 'good_box' : 'bad_box';
+    const formKey = type === 'good' ? 'good_box_ids' : 'bad_box_ids';
+    const value = picker[pickerKey];
+    if (!value) return;
+    if (form[formKey].includes(value)) {
+      setPicker({ ...picker, [pickerKey]: '' });
+      return;
+    }
+    setForm({ ...form, [formKey]: [...form[formKey], value] });
+    setPicker({ ...picker, [pickerKey]: '' });
+  };
+
+  const removeBox = (type, box) => {
+    const formKey = type === 'good' ? 'good_box_ids' : 'bad_box_ids';
+    setForm({ ...form, [formKey]: form[formKey].filter((item) => item !== box) });
+  };
+
+  const renderSelectedBoxes = (type) => {
+    const formKey = type === 'good' ? 'good_box_ids' : 'bad_box_ids';
+    const items = form[formKey];
+    if (items.length === 0) {
+      return <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>No boxes selected yet</div>;
+    }
+
+    return (
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+        {items.map((box) => (
+          <span
+            key={`${type}-${box}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 10px',
+              borderRadius: 999,
+              background: '#eef6f0',
+              color: 'var(--primary-dark)',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+            }}
+          >
+            {box}
+            <button
+              type="button"
+              onClick={() => removeBox(type, box)}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                color: 'var(--primary-dark)',
+                cursor: 'pointer',
+                fontWeight: 700,
+                padding: 0,
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+    );
   };
 
   const renderBoxOptions = () => (
@@ -178,17 +240,31 @@ export default function Fermentation() {
             </div>
             <div className="form-group">
               <label>Good Beans Boxes</label>
-              <select name="good_box_ids" value={form.good_box_ids} onChange={handleMulti} multiple size={6}>
-                {renderBoxOptions()}
-              </select>
-              <small style={{ color: 'var(--text-muted)' }}>Hold Ctrl or Cmd to choose multiple boxes.</small>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <select name="good_box" value={picker.good_box} onChange={handlePicker} style={{ flex: '1 1 220px' }}>
+                  <option value="">Select box...</option>
+                  {renderBoxOptions()}
+                </select>
+                <button className="btn btn-secondary" type="button" onClick={() => addBox('good')}>
+                  Add Box
+                </button>
+              </div>
+              <small style={{ color: 'var(--text-muted)' }}>Add one or more boxes for good beans.</small>
+              {renderSelectedBoxes('good')}
             </div>
             <div className="form-group">
               <label>Bad Beans Boxes</label>
-              <select name="bad_box_ids" value={form.bad_box_ids} onChange={handleMulti} multiple size={6}>
-                {renderBoxOptions()}
-              </select>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <select name="bad_box" value={picker.bad_box} onChange={handlePicker} style={{ flex: '1 1 220px' }}>
+                  <option value="">Select box...</option>
+                  {renderBoxOptions()}
+                </select>
+                <button className="btn btn-secondary" type="button" onClick={() => addBox('bad')}>
+                  Add Box
+                </button>
+              </div>
               <small style={{ color: 'var(--text-muted)' }}>Leave empty if this batch has no bad beans boxes.</small>
+              {renderSelectedBoxes('bad')}
             </div>
             <div className="form-group">
               <label>Start Date *</label>
