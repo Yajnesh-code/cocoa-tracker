@@ -67,9 +67,9 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS fermentation (
         id SERIAL PRIMARY KEY,
         batch_id INTEGER REFERENCES batches(id) ON DELETE CASCADE,
-        box_id VARCHAR(10) NOT NULL,
-        good_box_id VARCHAR(10),
-        bad_box_id VARCHAR(10),
+        box_id TEXT NOT NULL,
+        good_box_id TEXT,
+        bad_box_id TEXT,
         good_weight NUMERIC(10,2),
         bad_weight NUMERIC(10,2),
         start_date DATE NOT NULL,
@@ -78,8 +78,11 @@ async function initDB() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
       ALTER TABLE fermentation DROP CONSTRAINT IF EXISTS fermentation_batch_id_key;
-      ALTER TABLE fermentation ADD COLUMN IF NOT EXISTS good_box_id VARCHAR(10);
-      ALTER TABLE fermentation ADD COLUMN IF NOT EXISTS bad_box_id VARCHAR(10);
+      ALTER TABLE fermentation ALTER COLUMN box_id TYPE TEXT;
+      ALTER TABLE fermentation ADD COLUMN IF NOT EXISTS good_box_id TEXT;
+      ALTER TABLE fermentation ADD COLUMN IF NOT EXISTS bad_box_id TEXT;
+      ALTER TABLE fermentation ALTER COLUMN good_box_id TYPE TEXT;
+      ALTER TABLE fermentation ALTER COLUMN bad_box_id TYPE TEXT;
       ALTER TABLE fermentation ADD COLUMN IF NOT EXISTS good_weight NUMERIC(10,2);
       ALTER TABLE fermentation ADD COLUMN IF NOT EXISTS bad_weight NUMERIC(10,2);
       UPDATE fermentation

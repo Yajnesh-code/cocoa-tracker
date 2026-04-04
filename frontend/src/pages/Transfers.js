@@ -7,10 +7,19 @@ const BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row
 const MAX_ACTIVE_BATCHES_PER_BOX = 2;
 
 function normalizeFermentation(record) {
+  const parseBoxList = (value) => {
+    if (Array.isArray(value)) return value.filter(Boolean);
+    if (!value) return [];
+    return String(value).split(',').map((item) => item.trim()).filter(Boolean);
+  };
+  const goodBoxes = parseBoxList(record.good_box_ids || record.good_box_id || (!record.bad_box_id ? record.box_id : ''));
+  const badBoxes = parseBoxList(record.bad_box_ids || record.bad_box_id);
   return {
     ...record,
-    good_box_id: record.good_box_id || (!record.bad_box_id ? record.box_id : ''),
-    bad_box_id: record.bad_box_id || '',
+    good_box_id: goodBoxes.join(', '),
+    bad_box_id: badBoxes.join(', '),
+    good_box_ids: goodBoxes,
+    bad_box_ids: badBoxes,
   };
 }
 
@@ -102,8 +111,8 @@ export default function Transfers() {
       .filter((item) => item.status === 'active')
       .reduce((map, item) => {
         [
-          item.good_box_id ? { box: item.good_box_id, label: 'Good beans' } : null,
-          item.bad_box_id ? { box: item.bad_box_id, label: 'Bad beans' } : null,
+          ...item.good_box_ids.map((box) => ({ box, label: 'Good beans' })),
+          ...item.bad_box_ids.map((box) => ({ box, label: 'Bad beans' })),
         ]
           .filter(Boolean)
           .forEach((entry) => {
@@ -119,8 +128,8 @@ export default function Transfers() {
     const current = currentFermentation.filter((item) => item.status === 'active');
     const slots = [];
     current.forEach((item) => {
-      if (item.good_box_id) slots.push({ type: 'good', label: 'Good beans', box: item.good_box_id });
-      if (item.bad_box_id) slots.push({ type: 'bad', label: 'Bad beans', box: item.bad_box_id });
+      item.good_box_ids.forEach((box) => slots.push({ type: 'good', label: 'Good beans', box }));
+      item.bad_box_ids.forEach((box) => slots.push({ type: 'bad', label: 'Bad beans', box }));
     });
     return slots;
   }, [currentFermentation]);

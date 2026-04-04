@@ -7,26 +7,52 @@ const MAX_ACTIVE_BATCHES_PER_BOX = 2;
 const VALID_BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
   .flatMap((letter) => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
 
+function normalizeBox(value) {
+  if (value === undefined || value === null || value === '') return null;
+  return String(value).toUpperCase();
+}
+
+function parseBoxList(value) {
+  if (Array.isArray(value)) {
+    return value.map(normalizeBox).filter(Boolean);
+  }
+  if (value === undefined || value === null || value === '') {
+    return [];
+  }
+  return String(value)
+    .split(',')
+    .map((item) => normalizeBox(item.trim()))
+    .filter(Boolean);
+}
+
+function uniqueBoxes(values) {
+  return Array.from(new Set(values));
+}
+
+function joinBoxes(values) {
+  return uniqueBoxes(values).join(', ');
+}
+
 function normalizeFermentationRecord(record) {
-  const goodBox = record.good_box_id || (!record.bad_box_id ? record.box_id : null);
-  const badBox = record.bad_box_id || null;
+  const goodBoxes = parseBoxList(record.good_box_id || (!record.bad_box_id ? record.box_id : ''));
+  const badBoxes = parseBoxList(record.bad_box_id);
 
   return {
     ...record,
-    good_box_id: goodBox,
-    bad_box_id: badBox,
+    good_box_id: joinBoxes(goodBoxes),
+    bad_box_id: joinBoxes(badBoxes),
+    good_box_ids: goodBoxes,
+    bad_box_ids: badBoxes,
   };
 }
 
 function buildActiveBoxMap(rows) {
   return rows.reduce((map, row) => {
     const normalized = normalizeFermentationRecord(row);
-    [normalized.good_box_id, normalized.bad_box_id]
-      .filter(Boolean)
-      .forEach((box) => {
-        if (!map[box]) map[box] = new Set();
-        map[box].add(normalized.batch_id);
-      });
+    [...normalized.good_box_ids, ...normalized.bad_box_ids].forEach((box) => {
+      if (!map[box]) map[box] = new Set();
+      map[box].add(normalized.batch_id);
+    });
     return map;
   }, {});
 }
@@ -77,11 +103,11 @@ router.post('/', auth, async (req, res) => {
     }
 
     const fermentation = normalizeFermentationRecord(ferResult.rows[0]);
-    const currentBox = type === 'bad' ? fermentation.bad_box_id : fermentation.good_box_id;
-    if (!currentBox) {
+    const currentBoxes = type === 'bad' ? fermentation.bad_box_ids : fermentation.good_box_ids;
+    if (!currentBoxes.length) {
       return res.status(400).json({ error: `${type === 'bad' ? 'Bad' : 'Good'} beans are not currently assigned to any box` });
     }
-    if (currentBox !== from) {
+    if (!currentBoxes.includes(from)) {
       return res.status(400).json({ error: `${type === 'bad' ? 'Bad' : 'Good'} beans are not currently in ${from}` });
     }
 
@@ -90,7 +116,7 @@ router.post('/', auth, async (req, res) => {
       ['active', batch_id]
     );
     const occupancy = buildActiveBoxMap(occupied.rows);
-    if (((occupancy[to] ? occupancy[to].size : 0)) >= MAX_ACTIVE_BATCHES_PER_BOX) {
+    if ((occupancy[to] ? occupancy[to].size : 0) >= MAX_ACTIVE_BATCHES_PER_BOX) {
       return res.status(409).json({ error: `Target box ${to} already has ${MAX_ACTIVE_BATCHES_PER_BOX} active batches` });
     }
 
@@ -101,15 +127,17 @@ router.post('/', auth, async (req, res) => {
       [batch_id, type, from, to, transfer_date]
     );
 
-    const nextGoodBox = type === 'good' ? to : fermentation.good_box_id;
-    const nextBadBox = type === 'bad' ? to : fermentation.bad_box_id;
-    const primaryBox = nextGoodBox || nextBadBox;
+    const sourceBoxes = type === 'bad' ? fermentation.bad_box_ids : fermentation.good_box_ids;
+    const nextSourceBoxes = sourceBoxes.map((box) => (box === from ? to : box));
+    const nextGoodBoxes = type === 'good' ? uniqueBoxes(nextSourceBoxes) : fermentation.good_box_ids;
+    const nextBadBoxes = type === 'bad' ? uniqueBoxes(nextSourceBoxes) : fermentation.bad_box_ids;
+    const primaryBox = joinBoxes(nextGoodBoxes.length ? nextGoodBoxes : nextBadBoxes);
 
     await pool.query(
       `UPDATE fermentation
        SET box_id = $1, good_box_id = $2, bad_box_id = $3
        WHERE batch_id = $4 AND status = $5`,
-      [primaryBox, nextGoodBox, nextBadBox, batch_id, 'active']
+      [primaryBox, joinBoxes(nextGoodBoxes), joinBoxes(nextBadBoxes), batch_id, 'active']
     );
     await pool.query('COMMIT');
 

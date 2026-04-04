@@ -6,19 +6,33 @@ const BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row
 
 const MAX_ACTIVE_BATCHES_PER_BOX = 2;
 
+function parseBoxList(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (!value) return [];
+  return String(value).split(',').map((item) => item.trim()).filter(Boolean);
+}
+
 function normalizeFermentation(record) {
+  const goodBoxes = parseBoxList(record.good_box_ids || record.good_box_id || (!record.bad_box_id ? record.box_id : ''));
+  const badBoxes = parseBoxList(record.bad_box_ids || record.bad_box_id);
   return {
     ...record,
-    good_box_id: record.good_box_id || (!record.bad_box_id ? record.box_id : ''),
-    bad_box_id: record.bad_box_id || '',
+    good_box_id: goodBoxes.join(', '),
+    bad_box_id: badBoxes.join(', '),
+    good_box_ids: goodBoxes,
+    bad_box_ids: badBoxes,
   };
+}
+
+function readMultiSelectValues(event) {
+  return Array.from(event.target.selectedOptions).map((option) => option.value);
 }
 
 export default function Fermentation() {
   const [batches, setBatches] = useState([]);
   const [fermentations, setFermentations] = useState([]);
   const [dryingRecords, setDryingRecords] = useState([]);
-  const [form, setForm] = useState({ batch_id: '', good_box_id: '', bad_box_id: '', start_date: '' });
+  const [form, setForm] = useState({ batch_id: '', good_box_ids: [], bad_box_ids: [], start_date: '' });
   const [completeForm, setCompleteForm] = useState({ batch_id: '', end_date: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -48,21 +62,21 @@ export default function Fermentation() {
   }, []);
 
   const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleMulti = (e) => setForm({ ...form, [e.target.name]: readMultiSelectValues(e) });
   const handleC = (e) => setCompleteForm({ ...completeForm, [e.target.name]: e.target.value });
 
   const activeBoxes = useMemo(
     () => fermentations
       .filter((item) => item.status === 'active')
       .reduce((map, item) => {
-        [
-          item.good_box_id ? { box: item.good_box_id, label: 'Good beans' } : null,
-          item.bad_box_id ? { box: item.bad_box_id, label: 'Bad beans' } : null,
-        ]
-          .filter(Boolean)
-          .forEach((entry) => {
-            if (!map[entry.box]) map[entry.box] = [];
-            map[entry.box].push({ ...item, beanLabel: entry.label });
-          });
+        item.good_box_ids.forEach((box) => {
+          if (!map[box]) map[box] = [];
+          map[box].push({ ...item, beanLabel: 'Good beans' });
+        });
+        item.bad_box_ids.forEach((box) => {
+          if (!map[box]) map[box] = [];
+          map[box].push({ ...item, beanLabel: 'Bad beans' });
+        });
         return map;
       }, {}),
     [fermentations]
@@ -89,15 +103,15 @@ export default function Fermentation() {
     try {
       await api.post('/fermentation', {
         batch_id: form.batch_id,
-        good_box_id: form.good_box_id || null,
-        bad_box_id: form.bad_box_id || null,
+        good_box_ids: form.good_box_ids,
+        bad_box_ids: form.bad_box_ids,
         start_date: form.start_date,
       });
       setSuccess('Fermentation started!');
-      setForm({ batch_id: '', good_box_id: '', bad_box_id: '', start_date: '' });
+      setForm({ batch_id: '', good_box_ids: [], bad_box_ids: [], start_date: '' });
       await refresh();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed');
+      setError((err.response && err.response.data && err.response.data.error) || 'Failed');
     } finally {
       setLoading(false);
     }
@@ -114,17 +128,17 @@ export default function Fermentation() {
       setCompleteForm({ batch_id: '', end_date: '' });
       await refresh();
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed');
+      setError((err.response && err.response.data && err.response.data.error) || 'Failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const renderBoxOptions = (selectedOtherBox) => (
+  const renderBoxOptions = () => (
     BOXES.map((box) => {
       const activeAssignments = activeBoxes[box] || [];
       const occupiedCount = new Set(activeAssignments.map((item) => item.batch_id)).size;
-      const disabled = occupiedCount >= MAX_ACTIVE_BATCHES_PER_BOX && box !== selectedOtherBox;
+      const disabled = occupiedCount >= MAX_ACTIVE_BATCHES_PER_BOX;
 
       return (
         <option key={box} value={box} disabled={disabled}>
@@ -142,7 +156,7 @@ export default function Fermentation() {
     <div>
       <div className="page-header">
         <h1>Fermentation</h1>
-        <p>Assign good beans and bad beans for the same batch into fermentation boxes A1-E12. Each box can hold up to two active batches.</p>
+        <p>Assign one batch into multiple fermentation boxes for good beans and bad beans. Each box can still hold up to two active batches.</p>
       </div>
 
       <div className="grid-2">
@@ -163,18 +177,18 @@ export default function Fermentation() {
               </select>
             </div>
             <div className="form-group">
-              <label>Good Beans Box</label>
-              <select name="good_box_id" value={form.good_box_id} onChange={handle}>
-                <option value="">Not assigned</option>
-                {renderBoxOptions(form.bad_box_id)}
+              <label>Good Beans Boxes</label>
+              <select name="good_box_ids" value={form.good_box_ids} onChange={handleMulti} multiple size={6}>
+                {renderBoxOptions()}
               </select>
+              <small style={{ color: 'var(--text-muted)' }}>Hold Ctrl or Cmd to choose multiple boxes.</small>
             </div>
             <div className="form-group">
-              <label>Bad Beans Box</label>
-              <select name="bad_box_id" value={form.bad_box_id} onChange={handle}>
-                <option value="">Not assigned</option>
-                {renderBoxOptions(form.good_box_id)}
+              <label>Bad Beans Boxes</label>
+              <select name="bad_box_ids" value={form.bad_box_ids} onChange={handleMulti} multiple size={6}>
+                {renderBoxOptions()}
               </select>
+              <small style={{ color: 'var(--text-muted)' }}>Leave empty if this batch has no bad beans boxes.</small>
             </div>
             <div className="form-group">
               <label>Start Date *</label>
@@ -229,7 +243,7 @@ export default function Fermentation() {
                       textAlign: 'center',
                       fontSize: '0.8rem',
                       fontWeight: 700,
-                      minHeight: 108,
+                      minHeight: 116,
                       display: 'flex',
                       flexDirection: 'column',
                       justifyContent: 'center',
@@ -241,7 +255,7 @@ export default function Fermentation() {
                       {occupiedCount === 0 ? 'Free' : `${occupiedCount}/${MAX_ACTIVE_BATCHES_PER_BOX} used`}
                     </div>
                     {activeAssignments.map((item) => (
-                      <div key={`${item.id}-${item.beanLabel}`} style={{ fontSize: '0.68rem', wordBreak: 'break-word' }}>
+                      <div key={`${item.id}-${item.beanLabel}-${box}`} style={{ fontSize: '0.68rem', wordBreak: 'break-word' }}>
                         {item.batch_code} ({item.beanLabel === 'Good beans' ? 'Good' : 'Bad'})
                       </div>
                     ))}

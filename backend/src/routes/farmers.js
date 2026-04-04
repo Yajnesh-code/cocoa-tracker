@@ -169,10 +169,11 @@ router.get('/export/details', auth, async (req, res) => {
       LEFT JOIN (
         SELECT batch_id, STRING_AGG(DISTINCT box_name, ', ' ORDER BY box_name) AS boxes
         FROM (
-          SELECT batch_id, UNNEST(ARRAY[good_box_id, bad_box_id, box_id]) AS box_name
+          SELECT batch_id, BTRIM(UNNEST(string_to_array(COALESCE(good_box_id, bad_box_id, box_id), ','))) AS box_name
           FROM fermentation
         ) fer_boxes
         WHERE box_name IS NOT NULL
+          AND box_name <> ''
         GROUP BY batch_id
       ) fer ON fer.batch_id = b.id
       LEFT JOIN (

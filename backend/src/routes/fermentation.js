@@ -12,29 +12,48 @@ function normalizeBox(value) {
   return String(value).toUpperCase();
 }
 
+function parseBoxList(value) {
+  if (Array.isArray(value)) {
+    return value.map(normalizeBox).filter(Boolean);
+  }
+  if (value === undefined || value === null || value === '') {
+    return [];
+  }
+  return String(value)
+    .split(',')
+    .map((item) => normalizeBox(item.trim()))
+    .filter(Boolean);
+}
+
+function uniqueBoxes(values) {
+  return Array.from(new Set(values));
+}
+
+function joinBoxes(values) {
+  return uniqueBoxes(values).join(', ');
+}
+
 function normalizeFermentationRecord(record) {
-  const goodBox = record.good_box_id || (!record.bad_box_id ? record.box_id : null);
-  const badBox = record.bad_box_id || null;
+  const goodBoxes = parseBoxList(record.good_box_id || (!record.bad_box_id ? record.box_id : ''));
+  const badBoxes = parseBoxList(record.bad_box_id);
 
   return {
     ...record,
-    good_box_id: goodBox,
-    bad_box_id: badBox,
+    box_id: joinBoxes(goodBoxes.length ? goodBoxes : badBoxes),
+    good_box_id: joinBoxes(goodBoxes),
+    bad_box_id: joinBoxes(badBoxes),
+    good_box_ids: goodBoxes,
+    bad_box_ids: badBoxes,
   };
 }
 
 function buildActiveBoxMap(rows) {
   return rows.reduce((map, row) => {
-    const boxes = [
-      row.good_box_id || (!row.bad_box_id ? row.box_id : null),
-      row.bad_box_id || null,
-    ].filter(Boolean);
-
-    boxes.forEach((box) => {
+    const normalized = normalizeFermentationRecord(row);
+    [...normalized.good_box_ids, ...normalized.bad_box_ids].forEach((box) => {
       if (!map[box]) map[box] = new Set();
-      map[box].add(row.batch_id);
+      map[box].add(normalized.batch_id);
     });
-
     return map;
   }, {});
 }
@@ -76,19 +95,20 @@ router.get('/:batch_id', auth, async (req, res) => {
 
 // POST start fermentation
 router.post('/', auth, async (req, res) => {
-  const { batch_id, good_box_id, bad_box_id, start_date, good_weight, bad_weight } = req.body;
+  const { batch_id, good_box_ids, bad_box_ids, start_date, good_weight, bad_weight } = req.body;
   if (!batch_id || !start_date) {
     return res.status(400).json({ error: 'batch_id and start_date are required' });
   }
 
-  const goodBox = normalizeBox(good_box_id);
-  const badBox = normalizeBox(bad_box_id);
+  const goodBoxes = uniqueBoxes(parseBoxList(good_box_ids));
+  const badBoxes = uniqueBoxes(parseBoxList(bad_box_ids));
 
-  if (!goodBox && !badBox) {
+  if (!goodBoxes.length && !badBoxes.length) {
     return res.status(400).json({ error: 'Provide at least one good or bad beans box' });
   }
 
-  if ((goodBox && !VALID_BOXES.includes(goodBox)) || (badBox && !VALID_BOXES.includes(badBox))) {
+  const allBoxes = uniqueBoxes([...goodBoxes, ...badBoxes]);
+  if (allBoxes.some((box) => !VALID_BOXES.includes(box))) {
     return res.status(400).json({ error: 'Fermentation boxes must be in range A1-E12' });
   }
 
@@ -114,18 +134,18 @@ router.post('/', auth, async (req, res) => {
     );
     const occupancy = buildActiveBoxMap(activeAssignments.rows);
 
-    for (const box of [...new Set([goodBox, badBox].filter(Boolean))]) {
+    for (const box of allBoxes) {
       const currentCount = occupancy[box] ? occupancy[box].size : 0;
       if (currentCount >= MAX_ACTIVE_BATCHES_PER_BOX) {
         return res.status(409).json({ error: `Box ${box} already has ${MAX_ACTIVE_BATCHES_PER_BOX} active batches` });
       }
     }
 
-    const primaryBox = goodBox || badBox;
+    const primaryBox = joinBoxes(goodBoxes.length ? goodBoxes : badBoxes);
     const result = await pool.query(
       `INSERT INTO fermentation (batch_id, box_id, good_box_id, bad_box_id, good_weight, bad_weight, start_date, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'active') RETURNING *`,
-      [batch_id, primaryBox, goodBox, badBox, goodWeight, badWeight, start_date]
+      [batch_id, primaryBox, joinBoxes(goodBoxes), joinBoxes(badBoxes), goodWeight, badWeight, start_date]
     );
     res.status(201).json(normalizeFermentationRecord(result.rows[0]));
   } catch (err) {
