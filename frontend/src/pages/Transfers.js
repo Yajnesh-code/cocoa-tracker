@@ -19,6 +19,7 @@ export default function Transfers() {
   const [form, setForm] = useState({ batch_id: '', bean_type: 'good', from_box: '', to_box: '', transfer_date: '' });
   const [transfers, setTransfers] = useState([]);
   const [fermentations, setFermentations] = useState([]);
+  const [dryingRecords, setDryingRecords] = useState([]);
   const [currentFermentation, setCurrentFermentation] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -36,6 +37,7 @@ export default function Transfers() {
   useEffect(() => {
     api.get('/batches').then((r) => setBatches(r.data));
     refreshFermentations();
+    api.get('/drying').then((r) => setDryingRecords(r.data)).catch(() => setDryingRecords([]));
   }, []);
 
   const loadBatchDetails = async (batchId) => {
@@ -124,6 +126,12 @@ export default function Transfers() {
   }, [currentFermentation]);
 
   const fromOptions = activeLocations.filter((item) => item.type === form.bean_type);
+  const activeDryingBatchIds = new Set(
+    dryingRecords.filter((item) => !item.end_date).map((item) => String(item.batch_id))
+  );
+  const transferableBatches = batches.filter(
+    (batch) => !batch.packed && !activeDryingBatchIds.has(String(batch.id))
+  );
   const selectedBatch = batches.find((b) => String(b.id) === String(form.batch_id));
   const qrcodeUrl = selectedBatch ? `${window.location.origin}/trace/${selectedBatch.id}` : '';
   const excelUrl = selectedBatch ? `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/trace/${selectedBatch.id}/export` : '';
@@ -145,7 +153,7 @@ export default function Transfers() {
               <label>Batch *</label>
               <select name="batch_id" value={form.batch_id} onChange={handle} required>
                 <option value="">Select batch...</option>
-                {batches.map((b) => (
+                {transferableBatches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.batch_code} - {b.farmer_name}
                   </option>

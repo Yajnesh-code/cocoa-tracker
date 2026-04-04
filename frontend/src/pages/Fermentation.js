@@ -17,6 +17,7 @@ function normalizeFermentation(record) {
 export default function Fermentation() {
   const [batches, setBatches] = useState([]);
   const [fermentations, setFermentations] = useState([]);
+  const [dryingRecords, setDryingRecords] = useState([]);
   const [form, setForm] = useState({ batch_id: '', good_box_id: '', bad_box_id: '', start_date: '' });
   const [completeForm, setCompleteForm] = useState({ batch_id: '', end_date: '' });
   const [error, setError] = useState('');
@@ -31,6 +32,12 @@ export default function Fermentation() {
       ]);
       setBatches(batchRes.data);
       setFermentations(fermentationRes.data.map(normalizeFermentation));
+      try {
+        const dryingRes = await api.get('/drying');
+        setDryingRecords(dryingRes.data);
+      } catch (_) {
+        setDryingRecords([]);
+      }
     } catch (_) {
       setError('Unable to load fermentation data');
     }
@@ -59,6 +66,19 @@ export default function Fermentation() {
         return map;
       }, {}),
     [fermentations]
+  );
+
+  const activeDryingBatchIds = new Set(
+    dryingRecords.filter((item) => !item.end_date).map((item) => String(item.batch_id))
+  );
+  const activeFermentationBatchIds = new Set(
+    fermentations.filter((item) => item.status === 'active').map((item) => String(item.batch_id))
+  );
+  const startableBatches = batches.filter(
+    (batch) => !batch.packed && !activeDryingBatchIds.has(String(batch.id)) && !activeFermentationBatchIds.has(String(batch.id))
+  );
+  const completableBatches = batches.filter(
+    (batch) => !batch.packed && activeFermentationBatchIds.has(String(batch.id)) && !activeDryingBatchIds.has(String(batch.id))
   );
 
   const submit = async (e) => {
@@ -135,7 +155,7 @@ export default function Fermentation() {
               <label>Batch *</label>
               <select name="batch_id" value={form.batch_id} onChange={handle} required>
                 <option value="">Select batch...</option>
-                {batches.filter((b) => !b.packed).map((b) => (
+                {startableBatches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.batch_code} - {b.farmer_name}
                   </option>
@@ -173,7 +193,7 @@ export default function Fermentation() {
               <label>Batch *</label>
               <select name="batch_id" value={completeForm.batch_id} onChange={handleC} required>
                 <option value="">Select batch...</option>
-                {batches.filter((b) => !b.packed).map((b) => (
+                {completableBatches.map((b) => (
                   <option key={b.id} value={b.id}>
                     {b.batch_code} - {b.farmer_name}
                   </option>
