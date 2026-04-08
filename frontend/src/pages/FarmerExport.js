@@ -50,7 +50,7 @@ export default function FarmerExport() {
     <div>
       <div className="page-header">
         <h1>Batch Excel Export</h1>
-        <p>Select one or more batch codes and download one complete Excel sheet for only the selected batches.</p>
+        <p>Select one or more batch codes and download one complete Excel sheet with the same farmer/company collection totals shown in trace and summary pages.</p>
       </div>
 
       <div className="card">

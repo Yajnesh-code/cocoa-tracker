@@ -145,7 +145,7 @@ export default function Batches() {
   const renderBagInputs = (bags, type) => (
     <>
       {bags.map((bag, index) => (
-        <div key={`${type}-${index}`} className="bucket-row">
+        <div key={`${type}-${index}`} className="bucket-row" style={{ padding: 12, border: '1px solid var(--border)', borderRadius: 14, background: '#fff' }}>
           <div>
             <label>Gross bag weight (kg)</label>
             <input
@@ -195,7 +195,7 @@ export default function Batches() {
           <h2>New Batch</h2>
           {error && <div className="alert alert-error">{error}</div>}
           {success && <div className="alert alert-success">{success}</div>}
-          <form onSubmit={submit}>
+          <form onSubmit={submit} className="collection-shell">
             <div className="form-group">
               <label>Farmer *</label>
               <select name="farmer_id" value={form.farmer_id} onChange={handle} required>
@@ -211,23 +211,15 @@ export default function Batches() {
               <label>Pod Collection Date *</label>
               <input name="pod_date" type="date" value={form.pod_date} onChange={handle} required />
             </div>
-            <div
-              style={{
-                border: '1px solid var(--border)',
-                borderRadius: 16,
-                padding: 16,
-                marginBottom: 18,
-                background: 'linear-gradient(180deg, #fbfdfb 0%, #f4faf5 100%)',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+            <div className="collection-section collection-section--tinted">
+              <div className="collection-section-header">
                 <div>
-                  <h3 style={{ margin: 0, color: 'var(--primary-dark)', fontSize: '1rem' }}>Farmer Recorded Weight</h3>
-                  <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
+                  <h3>Farmer Recorded Weight</h3>
+                  <p>
                     Enter the weight noted at the farm before the company rechecks the bags.
                   </p>
                 </div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary)' }}>
+                <div className="collection-total-pill">
                   Farmer total: {farmerGrandTotal} kg
                 </div>
               </div>
@@ -258,56 +250,60 @@ export default function Batches() {
                 </div>
               </div>
             </div>
-            <div className="form-group">
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                <label>Company Verified Good Bags (kg)</label>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                  Net after subtracting empty bag weight
+            <div className="collection-section">
+              <div className="collection-section-header">
+                <div>
+                  <h3>Company Verified Good Bags</h3>
+                  <p>Use the company recheck values here. Net weight is calculated from gross bag weight minus empty bag weight.</p>
+                </div>
+                <span className="collection-total-pill">
+                  Company good total: {formatWeight(goodTotal)} ({countFilledBags(goodBags)} bags)
                 </span>
+              </div>
+              <div className="compact-help" style={{ marginBottom: 12 }}>
+                  Net after subtracting empty bag weight
               </div>
               {renderBagInputs(goodBags, 'good')}
-              <div style={{ marginTop: 8, fontSize: '0.9rem', color: 'var(--primary)', fontWeight: 600 }}>
-                Company good total: {formatWeight(goodTotal)} ({countFilledBags(goodBags)} bags)
-              </div>
             </div>
-            <div className="form-group">
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                <label>Company Verified Bad Bags (kg)</label>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                  Net after subtracting empty bag weight
+            <div className="collection-section">
+              <div className="collection-section-header">
+                <div>
+                  <h3>Company Verified Bad Bags</h3>
+                  <p>Record the rejected or damaged pod bags separately so the verified totals stay accurate everywhere.</p>
+                </div>
+                <span className="collection-total-pill">
+                  Company bad total: {formatWeight(badTotal)} ({countFilledBags(badBags)} bags)
                 </span>
               </div>
+              <div className="compact-help" style={{ marginBottom: 12 }}>
+                  Net after subtracting empty bag weight
+              </div>
               {renderBagInputs(badBags, 'bad')}
-              <div style={{ marginTop: 8, fontSize: '0.9rem', color: 'var(--primary)', fontWeight: 600 }}>
-                Company bad total: {formatWeight(badTotal)} ({countFilledBags(badBags)} bags)
-              </div>
-              <div style={{ marginTop: 8, fontSize: '0.95rem', color: 'var(--primary-dark)', fontWeight: 700 }}>
-                Company grand total: {total} kg ({countFilledBags(goodBags) + countFilledBags(badBags)} bags)
-              </div>
             </div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-                gap: 12,
-                marginBottom: 18,
-              }}
-            >
-              <div className="card" style={{ margin: 0, padding: 14, background: '#f6fbf7' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Farmer good</div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary-dark)' }}>{formatWeight(farmerGoodTotal)}</div>
+            <div className="collection-summary-grid">
+              <div className="collection-summary-card">
+                <div className="label">Farmer good</div>
+                <div className="value">{formatWeight(farmerGoodTotal)}</div>
               </div>
-              <div className="card" style={{ margin: 0, padding: 14, background: '#f6fbf7' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Farmer bad</div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary-dark)' }}>{formatWeight(farmerBadTotal)}</div>
+              <div className="collection-summary-card">
+                <div className="label">Farmer bad</div>
+                <div className="value">{formatWeight(farmerBadTotal)}</div>
               </div>
-              <div className="card" style={{ margin: 0, padding: 14, background: '#eef6f0' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Company good</div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary-dark)' }}>{formatWeight(goodTotal)}</div>
+              <div className="collection-summary-card collection-summary-card--accent">
+                <div className="label">Company good</div>
+                <div className="value">{formatWeight(goodTotal)}</div>
               </div>
-              <div className="card" style={{ margin: 0, padding: 14, background: '#eef6f0' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Company bad</div>
-                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary-dark)' }}>{formatWeight(badTotal)}</div>
+              <div className="collection-summary-card collection-summary-card--accent">
+                <div className="label">Company bad</div>
+                <div className="value">{formatWeight(badTotal)}</div>
+              </div>
+              <div className="collection-summary-card collection-summary-card--accent">
+                <div className="label">Company grand total</div>
+                <div className="value">{total} kg</div>
+              </div>
+              <div className="collection-summary-card">
+                <div className="label">Total bags</div>
+                <div className="value">{countFilledBags(goodBags) + countFilledBags(badBags)}</div>
               </div>
             </div>
             <button className="btn btn-primary" type="submit" disabled={loading}>
