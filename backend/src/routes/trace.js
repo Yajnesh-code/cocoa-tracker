@@ -64,13 +64,22 @@ function getBucketDetails(breaking) {
 }
 
 function normalizeFermentationRecord(record) {
-  const goodBox = record.good_box_id || (!record.bad_box_id ? record.box_id : null);
-  const badBox = record.bad_box_id || null;
+  const toBoxList = (value) => {
+    if (value === undefined || value === null || value === '') return [];
+    return String(value)
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  };
+  const goodBoxes = toBoxList(record.good_box_id || (!record.bad_box_id ? record.box_id : ''));
+  const badBoxes = toBoxList(record.bad_box_id);
 
   return {
     ...record,
-    good_box_id: goodBox,
-    bad_box_id: badBox,
+    good_box_id: goodBoxes.join(', '),
+    bad_box_id: badBoxes.join(', '),
+    good_box_ids: goodBoxes,
+    bad_box_ids: badBoxes,
   };
 }
 
@@ -84,9 +93,12 @@ function buildBatchTraceSections(items) {
       { label: 'Farmer Code', value: batch.farmer_code },
       { label: 'Location', value: batch.location },
       { label: 'Collection Date', value: formatDate(batch.pod_date) },
-      { label: 'Good Bag Weight (kg)', value: formatNumber(batch.pod_weight) },
-      { label: 'Bad Bag Weight (kg)', value: formatNumber(batch.bad_pod_weight ?? 0) },
-      { label: 'Total Collected Weight (kg)', value: formatNumber(Number(batch.pod_weight || 0) + Number(batch.bad_pod_weight || 0)) },
+      { label: 'Farmer Good Weight (kg)', value: formatNumber(batch.farmer_pod_weight ?? 0) },
+      { label: 'Farmer Bad Weight (kg)', value: formatNumber(batch.farmer_bad_pod_weight ?? 0) },
+      { label: 'Farmer Total Weight (kg)', value: formatNumber(Number(batch.farmer_pod_weight || 0) + Number(batch.farmer_bad_pod_weight || 0)) },
+      { label: 'Company Good Weight (kg)', value: formatNumber(batch.pod_weight) },
+      { label: 'Company Bad Weight (kg)', value: formatNumber(batch.bad_pod_weight ?? 0) },
+      { label: 'Company Total Weight (kg)', value: formatNumber(Number(batch.pod_weight || 0) + Number(batch.bad_pod_weight || 0)) },
       { label: 'Status', value: packing ? 'Packed' : 'In Progress' },
     ];
 
@@ -277,9 +289,12 @@ function buildExcelHtmlReport(data, batchId) {
     { label: 'Farmer Code', value: batch.farmer_code },
     { label: 'Location', value: batch.location },
     { label: 'Collection Date', value: formatDate(batch.pod_date) },
-    { label: 'Good Bag Weight (kg)', value: formatNumber(batch.pod_weight) },
-    { label: 'Bad Bag Weight (kg)', value: formatNumber(batch.bad_pod_weight ?? 0) },
-    { label: 'Total Collected Weight (kg)', value: formatNumber(Number(batch.pod_weight || 0) + Number(batch.bad_pod_weight || 0)) },
+    { label: 'Farmer Good Weight (kg)', value: formatNumber(batch.farmer_pod_weight ?? 0) },
+    { label: 'Farmer Bad Weight (kg)', value: formatNumber(batch.farmer_bad_pod_weight ?? 0) },
+    { label: 'Farmer Total Weight (kg)', value: formatNumber(Number(batch.farmer_pod_weight || 0) + Number(batch.farmer_bad_pod_weight || 0)) },
+    { label: 'Company Good Weight (kg)', value: formatNumber(batch.pod_weight) },
+    { label: 'Company Bad Weight (kg)', value: formatNumber(batch.bad_pod_weight ?? 0) },
+    { label: 'Company Total Weight (kg)', value: formatNumber(Number(batch.pod_weight || 0) + Number(batch.bad_pod_weight || 0)) },
     { label: 'Status', value: packing ? 'Packed' : 'In Progress' },
   ];
 

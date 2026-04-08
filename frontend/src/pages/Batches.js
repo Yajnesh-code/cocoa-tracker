@@ -8,9 +8,15 @@ export default function Batches() {
   const { user } = useAuth();
   const [batches, setBatches] = useState([]);
   const [farmers, setFarmers] = useState([]);
+  const [exportBatchId, setExportBatchId] = useState('');
   const [goodBags, setGoodBags] = useState([emptyBag()]);
   const [badBags, setBadBags] = useState([emptyBag()]);
-  const [form, setForm] = useState({ farmer_id: '', pod_date: '' });
+  const [form, setForm] = useState({
+    farmer_id: '',
+    pod_date: '',
+    farmer_pod_weight: '',
+    farmer_bad_pod_weight: '',
+  });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -60,6 +66,13 @@ export default function Batches() {
   const goodTotal = sumNetWeights(goodBags);
   const badTotal = sumNetWeights(badBags);
   const total = (goodTotal + badTotal).toFixed(2);
+  const farmerGoodTotal = Number(form.farmer_pod_weight || 0);
+  const farmerBadTotal = Number(form.farmer_bad_pod_weight || 0);
+  const farmerGrandTotal = (farmerGoodTotal + farmerBadTotal).toFixed(2);
+  const selectedExportBatch = batches.find((batch) => String(batch.id) === String(exportBatchId));
+  const exportUrl = selectedExportBatch
+    ? `${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/trace/${selectedExportBatch.id}/export`
+    : '';
 
   const buildBagPayload = (bags) =>
     bags
@@ -97,7 +110,7 @@ export default function Batches() {
     try {
       const res = await api.post('/batches', { ...form, good_bag_weights, bad_bag_weights });
       setSuccess(`Batch ${res.data.batch_code} created!`);
-      setForm({ farmer_id: '', pod_date: '' });
+      setForm({ farmer_id: '', pod_date: '', farmer_pod_weight: '', farmer_bad_pod_weight: '' });
       setGoodBags([emptyBag()]);
       setBadBags([emptyBag()]);
       await load();
@@ -174,7 +187,7 @@ export default function Batches() {
     <div>
       <div className="page-header">
         <h1>Pod Collection</h1>
-        <p>Record cocoa pod collection batches from farmers using net bag weight after subtracting the empty bag weight.</p>
+        <p>Record both farmer-reported pod weights and company-verified net bag weights for good and bad pods in one clean collection flow.</p>
       </div>
 
       <div className="grid-2">
@@ -198,21 +211,103 @@ export default function Batches() {
               <label>Pod Collection Date *</label>
               <input name="pod_date" type="date" value={form.pod_date} onChange={handle} required />
             </div>
-            <div className="form-group">
-              <label>Good Bag Weights (kg)</label>
-              {renderBagInputs(goodBags, 'good')}
-              <div style={{ marginTop: 8, fontSize: '0.9rem', color: 'var(--primary)', fontWeight: 600 }}>
-                Good total: {formatWeight(goodTotal)} ({countFilledBags(goodBags)} bags)
+            <div
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 16,
+                padding: 16,
+                marginBottom: 18,
+                background: 'linear-gradient(180deg, #fbfdfb 0%, #f4faf5 100%)',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+                <div>
+                  <h3 style={{ margin: 0, color: 'var(--primary-dark)', fontSize: '1rem' }}>Farmer Recorded Weight</h3>
+                  <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.86rem' }}>
+                    Enter the weight noted at the farm before the company rechecks the bags.
+                  </p>
+                </div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--primary)' }}>
+                  Farmer total: {farmerGrandTotal} kg
+                </div>
+              </div>
+              <div className="bucket-row">
+                <div>
+                  <label>Farmer good pod weight (kg)</label>
+                  <input
+                    name="farmer_pod_weight"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="e.g. 420.50"
+                    value={form.farmer_pod_weight}
+                    onChange={handle}
+                  />
+                </div>
+                <div>
+                  <label>Farmer bad pod weight (kg)</label>
+                  <input
+                    name="farmer_bad_pod_weight"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="e.g. 25.20"
+                    value={form.farmer_bad_pod_weight}
+                    onChange={handle}
+                  />
+                </div>
               </div>
             </div>
             <div className="form-group">
-              <label>Bad Bag Weights (kg)</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <label>Company Verified Good Bags (kg)</label>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  Net after subtracting empty bag weight
+                </span>
+              </div>
+              {renderBagInputs(goodBags, 'good')}
+              <div style={{ marginTop: 8, fontSize: '0.9rem', color: 'var(--primary)', fontWeight: 600 }}>
+                Company good total: {formatWeight(goodTotal)} ({countFilledBags(goodBags)} bags)
+              </div>
+            </div>
+            <div className="form-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <label>Company Verified Bad Bags (kg)</label>
+                <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                  Net after subtracting empty bag weight
+                </span>
+              </div>
               {renderBagInputs(badBags, 'bad')}
               <div style={{ marginTop: 8, fontSize: '0.9rem', color: 'var(--primary)', fontWeight: 600 }}>
-                Bad total: {formatWeight(badTotal)} ({countFilledBags(badBags)} bags)
+                Company bad total: {formatWeight(badTotal)} ({countFilledBags(badBags)} bags)
               </div>
               <div style={{ marginTop: 8, fontSize: '0.95rem', color: 'var(--primary-dark)', fontWeight: 700 }}>
-                Grand total: {total} kg ({countFilledBags(goodBags) + countFilledBags(badBags)} bags)
+                Company grand total: {total} kg ({countFilledBags(goodBags) + countFilledBags(badBags)} bags)
+              </div>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                gap: 12,
+                marginBottom: 18,
+              }}
+            >
+              <div className="card" style={{ margin: 0, padding: 14, background: '#f6fbf7' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Farmer good</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary-dark)' }}>{formatWeight(farmerGoodTotal)}</div>
+              </div>
+              <div className="card" style={{ margin: 0, padding: 14, background: '#f6fbf7' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Farmer bad</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary-dark)' }}>{formatWeight(farmerBadTotal)}</div>
+              </div>
+              <div className="card" style={{ margin: 0, padding: 14, background: '#eef6f0' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Company good</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary-dark)' }}>{formatWeight(goodTotal)}</div>
+              </div>
+              <div className="card" style={{ margin: 0, padding: 14, background: '#eef6f0' }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Company bad</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--primary-dark)' }}>{formatWeight(badTotal)}</div>
               </div>
             </div>
             <button className="btn btn-primary" type="submit" disabled={loading}>
@@ -223,14 +318,41 @@ export default function Batches() {
 
         <div className="card">
           <h2>All Batches ({batches.length})</h2>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
+            <div style={{ flex: '1 1 280px' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 6 }}>
+                Select Batch Code For Excel
+              </label>
+              <select value={exportBatchId} onChange={(e) => setExportBatchId(e.target.value)}>
+                <option value="">Choose batch code...</option>
+                {batches.map((batch) => (
+                  <option key={batch.id} value={batch.id}>
+                    {batch.batch_code} - {batch.farmer_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              {selectedExportBatch ? (
+                <a className="btn btn-secondary" href={exportUrl} target="_blank" rel="noreferrer">
+                  Download Excel Sheet
+                </a>
+              ) : (
+                <button type="button" className="btn btn-secondary" disabled>
+                  Download Excel Sheet
+                </button>
+              )}
+            </div>
+          </div>
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>Batch Code</th>
                   <th>Farmer</th>
-                  <th>Good/Bad Bags</th>
-                  <th>Good/Bad Weight</th>
+                  <th>Bags</th>
+                  <th>Farmer Weight</th>
+                  <th>Company Weight</th>
                   <th>Date</th>
                   <th>Status</th>
                   <th>Action</th>
@@ -239,7 +361,7 @@ export default function Batches() {
               <tbody>
                 {batches.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
                       No batches yet
                     </td>
                   </tr>
@@ -248,7 +370,8 @@ export default function Batches() {
                     <tr key={batch.id}>
                       <td><strong>{batch.batch_code}</strong></td>
                       <td>{batch.farmer_name}</td>
-                      <td>{batch.bag_count} / {batch.bad_bag_count || 0}</td>
+                      <td>{batch.bag_count} good / {batch.bad_bag_count || 0} bad</td>
+                      <td>{formatWeight(batch.farmer_pod_weight)} / {formatWeight(batch.farmer_bad_pod_weight)}</td>
                       <td>{formatWeight(batch.pod_weight)} / {formatWeight(batch.bad_pod_weight)}</td>
                       <td>{batch.pod_date?.slice(0, 10)}</td>
                       <td>

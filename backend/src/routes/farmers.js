@@ -42,21 +42,28 @@ function buildFarmerBatchSheet(rows) {
       (sum, item) => sum + Number(item.pod_weight || 0) + Number(item.bad_pod_weight || 0),
       0
     );
+    const farmerWeight = group.batches.reduce(
+      (sum, item) => sum + Number(item.farmer_pod_weight || 0) + Number(item.farmer_bad_pod_weight || 0),
+      0
+    );
 
     return `
       <div class="section">
         <div class="section-title">${escapeHtml(group.farmer_code)} - ${escapeHtml(group.farmer_name)}</div>
         <div class="section-meta">
-          Location: ${escapeHtml(group.location)} | Total batches: ${group.batches.length} | Total collected weight: ${formatWeight(totalWeight)} kg
+          Location: ${escapeHtml(group.location)} | Total batches: ${group.batches.length} | Farmer recorded: ${formatWeight(farmerWeight)} kg | Company recorded: ${formatWeight(totalWeight)} kg
         </div>
         <table>
           <thead>
             <tr>
               <th>Batch Code</th>
               <th>Pod Date</th>
-              <th>Good Weight (kg)</th>
-              <th>Bad Weight (kg)</th>
-              <th>Total Weight (kg)</th>
+              <th>Farmer Good (kg)</th>
+              <th>Farmer Bad (kg)</th>
+              <th>Farmer Total (kg)</th>
+              <th>Company Good (kg)</th>
+              <th>Company Bad (kg)</th>
+              <th>Company Total (kg)</th>
               <th>Breaking Date</th>
               <th>Wet Weight (kg)</th>
               <th>Fermentation Boxes</th>
@@ -74,6 +81,9 @@ function buildFarmerBatchSheet(rows) {
               <tr>
                 <td>${escapeHtml(row.batch_code)}</td>
                 <td>${escapeHtml(formatDate(row.pod_date))}</td>
+                <td>${escapeHtml(formatWeight(row.farmer_pod_weight))}</td>
+                <td>${escapeHtml(formatWeight(row.farmer_bad_pod_weight))}</td>
+                <td>${escapeHtml(formatWeight(Number(row.farmer_pod_weight || 0) + Number(row.farmer_bad_pod_weight || 0)))}</td>
                 <td>${escapeHtml(formatWeight(row.pod_weight))}</td>
                 <td>${escapeHtml(formatWeight(row.bad_pod_weight))}</td>
                 <td>${escapeHtml(formatWeight(Number(row.pod_weight || 0) + Number(row.bad_pod_weight || 0)))}</td>
@@ -151,6 +161,8 @@ router.get('/export/details', auth, async (req, res) => {
         b.id AS batch_id,
         b.batch_code,
         b.pod_date,
+        b.farmer_pod_weight,
+        b.farmer_bad_pod_weight,
         b.pod_weight,
         b.bad_pod_weight,
         br.breaking_date,

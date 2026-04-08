@@ -57,7 +57,7 @@ export default function Dashboard() {
               <div className="table-wrap">
                 <table>
                   <thead>
-                    <tr><th>Batch Code</th><th>Farmer</th><th>Location</th><th>Pod Weight</th><th>Pod Date</th><th>Action</th></tr>
+                    <tr><th>Batch Code</th><th>Farmer</th><th>Location</th><th>Farmer Total</th><th>Company Total</th><th>Pod Date</th><th>Action</th></tr>
                   </thead>
                   <tbody>
                     {batches.slice(0, 8).map(b => (
@@ -65,6 +65,7 @@ export default function Dashboard() {
                         <td><strong>{b.batch_code}</strong></td>
                         <td>{b.farmer_name}</td>
                         <td>{b.location}</td>
+                        <td>{formatWeight(Number(b.farmer_pod_weight || 0) + Number(b.farmer_bad_pod_weight || 0))}</td>
                         <td>{formatWeight(Number(b.pod_weight || 0) + Number(b.bad_pod_weight || 0))}</td>
                         <td>{b.pod_date?.slice(0,10)}</td>
                         <td>

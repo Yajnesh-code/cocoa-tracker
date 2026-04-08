@@ -86,6 +86,7 @@ export default function Trace() {
   const bucketDetails = getBucketDetails(breaking);
   const handlePrint = () => window.print();
   const totalCollectedWeight = Number(batch.pod_weight || 0) + Number(batch.bad_pod_weight || 0);
+  const farmerCollectedWeight = Number(batch.farmer_pod_weight || 0) + Number(batch.farmer_bad_pod_weight || 0);
   const reportHighlights = [
     { label: 'Batch Code', value: batch.batch_code },
     { label: 'Farmer', value: batch.farmer_name },
@@ -212,8 +213,12 @@ export default function Trace() {
             <div className="timeline-item">
               <h4>Pod Collection</h4>
               <p>
-                Date: {formatDate(batch.pod_date)} | Good weight: {formatWeight(batch.pod_weight)} | Bad weight: {formatWeight(batch.bad_pod_weight)}
-                {' | '}Total weight: {formatWeight(totalCollectedWeight)}
+                Date: {formatDate(batch.pod_date)} | Farmer good: {formatWeight(batch.farmer_pod_weight)} | Farmer bad: {formatWeight(batch.farmer_bad_pod_weight)}
+                {' | '}Farmer total: {formatWeight(farmerCollectedWeight)}
+              </p>
+              <p>
+                Company good: {formatWeight(batch.pod_weight)} | Company bad: {formatWeight(batch.bad_pod_weight)}
+                {' | '}Company total: {formatWeight(totalCollectedWeight)}
               </p>
             </div>
 
@@ -337,9 +342,12 @@ export default function Trace() {
               <div className="print-key-item"><div className="print-key-label">Farmer Code</div><div className="print-key-value">{batch.farmer_code}</div></div>
               <div className="print-key-item"><div className="print-key-label">Location</div><div className="print-key-value">{batch.location}</div></div>
               <div className="print-key-item"><div className="print-key-label">Collection Date</div><div className="print-key-value">{formatDate(batch.pod_date)}</div></div>
-              <div className="print-key-item"><div className="print-key-label">Good Bag Weight</div><div className="print-key-value">{formatWeight(batch.pod_weight)}</div></div>
-              <div className="print-key-item"><div className="print-key-label">Bad Bag Weight</div><div className="print-key-value">{formatWeight(batch.bad_pod_weight)}</div></div>
-              <div className="print-key-item"><div className="print-key-label">Total Collected Weight</div><div className="print-key-value">{formatWeight(totalCollectedWeight)}</div></div>
+              <div className="print-key-item"><div className="print-key-label">Farmer Good Weight</div><div className="print-key-value">{formatWeight(batch.farmer_pod_weight)}</div></div>
+              <div className="print-key-item"><div className="print-key-label">Farmer Bad Weight</div><div className="print-key-value">{formatWeight(batch.farmer_bad_pod_weight)}</div></div>
+              <div className="print-key-item"><div className="print-key-label">Farmer Total Weight</div><div className="print-key-value">{formatWeight(farmerCollectedWeight)}</div></div>
+              <div className="print-key-item"><div className="print-key-label">Company Good Weight</div><div className="print-key-value">{formatWeight(batch.pod_weight)}</div></div>
+              <div className="print-key-item"><div className="print-key-label">Company Bad Weight</div><div className="print-key-value">{formatWeight(batch.bad_pod_weight)}</div></div>
+              <div className="print-key-item"><div className="print-key-label">Company Total Weight</div><div className="print-key-value">{formatWeight(totalCollectedWeight)}</div></div>
               <div className="print-key-item"><div className="print-key-label">Active Box(es)</div><div className="print-key-value">{activeBoxes}</div></div>
             </div>
           </div>
@@ -353,9 +361,12 @@ export default function Trace() {
                   <div className="print-stage-meta">{formatDate(batch.pod_date)}</div>
                 </div>
                 <div className="print-inline-list">
-                  <div className="print-inline-row"><span>Collected weight</span><strong>{formatWeight(batch.pod_weight)}</strong></div>
-                  <div className="print-inline-row"><span>Bad bag weight</span><strong>{formatWeight(batch.bad_pod_weight)}</strong></div>
-                  <div className="print-inline-row"><span>Total collected weight</span><strong>{formatWeight(totalCollectedWeight)}</strong></div>
+                  <div className="print-inline-row"><span>Farmer good weight</span><strong>{formatWeight(batch.farmer_pod_weight)}</strong></div>
+                  <div className="print-inline-row"><span>Farmer bad weight</span><strong>{formatWeight(batch.farmer_bad_pod_weight)}</strong></div>
+                  <div className="print-inline-row"><span>Farmer total weight</span><strong>{formatWeight(farmerCollectedWeight)}</strong></div>
+                  <div className="print-inline-row"><span>Company good weight</span><strong>{formatWeight(batch.pod_weight)}</strong></div>
+                  <div className="print-inline-row"><span>Company bad weight</span><strong>{formatWeight(batch.bad_pod_weight)}</strong></div>
+                  <div className="print-inline-row"><span>Company total weight</span><strong>{formatWeight(totalCollectedWeight)}</strong></div>
                 </div>
               </div>
 

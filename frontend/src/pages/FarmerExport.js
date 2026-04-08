@@ -78,7 +78,7 @@ export default function FarmerExport() {
                 <th>Batch Code</th>
                 <th>Farmer</th>
                 <th>Date</th>
-                <th>Total Weight</th>
+                <th>Farmer / Company Total</th>
               </tr>
             </thead>
             <tbody>
@@ -90,7 +90,8 @@ export default function FarmerExport() {
                 </tr>
               ) : (
                 batches.map((batch) => {
-                  const totalWeight = Number(batch.pod_weight || 0) + Number(batch.bad_pod_weight || 0);
+                  const farmerTotalWeight = Number(batch.farmer_pod_weight || 0) + Number(batch.farmer_bad_pod_weight || 0);
+                  const companyTotalWeight = Number(batch.pod_weight || 0) + Number(batch.bad_pod_weight || 0);
                   return (
                     <tr key={batch.id}>
                       <td>
@@ -103,7 +104,7 @@ export default function FarmerExport() {
                       <td><strong>{batch.batch_code}</strong></td>
                       <td>{batch.farmer_name}</td>
                       <td>{batch.pod_date?.slice(0, 10)}</td>
-                      <td>{totalWeight.toFixed(2)} kg</td>
+                      <td>{farmerTotalWeight.toFixed(2)} kg / {companyTotalWeight.toFixed(2)} kg</td>
                     </tr>
                   );
                 })

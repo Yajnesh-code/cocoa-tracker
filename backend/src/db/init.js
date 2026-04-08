@@ -37,12 +37,16 @@ async function initDB() {
         farmer_id INTEGER REFERENCES farmers(id) ON DELETE RESTRICT,
         bag_count INTEGER NOT NULL,
         bad_bag_count INTEGER NOT NULL DEFAULT 0,
+        farmer_pod_weight NUMERIC(10,2) NOT NULL DEFAULT 0,
+        farmer_bad_pod_weight NUMERIC(10,2) NOT NULL DEFAULT 0,
         pod_weight NUMERIC(10,2) NOT NULL,
         bad_pod_weight NUMERIC(10,2) NOT NULL DEFAULT 0,
         pod_date DATE NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
       ALTER TABLE batches ADD COLUMN IF NOT EXISTS bad_bag_count INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE batches ADD COLUMN IF NOT EXISTS farmer_pod_weight NUMERIC(10,2) NOT NULL DEFAULT 0;
+      ALTER TABLE batches ADD COLUMN IF NOT EXISTS farmer_bad_pod_weight NUMERIC(10,2) NOT NULL DEFAULT 0;
       ALTER TABLE batches ADD COLUMN IF NOT EXISTS bad_pod_weight NUMERIC(10,2) NOT NULL DEFAULT 0;
 
       -- BREAKING STAGE
