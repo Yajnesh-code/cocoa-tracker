@@ -60,7 +60,9 @@ export default function Dashboard() {
       </div>
 
       {loading ? (
-        <div className="loading"><div className="spinner" /></div></div>
+        <div className="loading">
+          <div className="spinner" />
+        </div>
       ) : (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 28 }}>
