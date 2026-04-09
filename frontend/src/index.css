@@ -398,6 +398,261 @@ tr:hover td { background: #f0f7f0; }
   color: var(--text-muted);
 }
 
+.fermentation-card {
+  display: grid;
+  gap: 18px;
+}
+
+.fermentation-picker-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.fermentation-picker-select {
+  min-width: 0;
+}
+
+.fermentation-picker-button {
+  min-width: 110px;
+  justify-content: center;
+}
+
+.fermentation-empty-selection {
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.fermentation-selected-boxes {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.fermentation-selected-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.fermentation-selected-chip-good {
+  background: #eef6f0;
+  color: var(--primary-dark);
+  border-color: #cde3d0;
+}
+
+.fermentation-selected-chip-bad {
+  background: #fff3ea;
+  color: #8b4513;
+  border-color: #f1d2bb;
+}
+
+.fermentation-selected-chip-remove {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0;
+  line-height: 1;
+}
+
+.fermentation-chamber {
+  margin-top: 20px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 18px;
+  background: linear-gradient(180deg, #fbfdfb 0%, #f3f9f4 100%);
+}
+
+.fermentation-chamber-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.fermentation-chamber-header h2 {
+  margin-bottom: 4px;
+}
+
+.fermentation-chamber-header p {
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.fermentation-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fermentation-legend-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.fermentation-legend-pill-free {
+  background: #edf7ef;
+  color: #236a3d;
+  border-color: #cce8d2;
+}
+
+.fermentation-legend-pill-active {
+  background: #fff4db;
+  color: #9a6700;
+  border-color: #f1d18c;
+}
+
+.fermentation-legend-pill-full {
+  background: #fdecec;
+  color: #a12622;
+  border-color: #f2c2c0;
+}
+
+.fermentation-chamber-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.fermentation-summary-pill {
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--border);
+  color: var(--primary-dark);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.fermentation-chamber-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.fermentation-box-card {
+  min-height: 170px;
+  border-radius: 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 6px 18px rgba(27, 67, 50, 0.07);
+}
+
+.fermentation-box-card-free {
+  background: linear-gradient(180deg, #ffffff 0%, #f4fbf5 100%);
+}
+
+.fermentation-box-card-active {
+  background: linear-gradient(180deg, #fffdf7 0%, #fff5dd 100%);
+  border-color: #eed39a;
+}
+
+.fermentation-box-card-full {
+  background: linear-gradient(180deg, #fff7f7 0%, #fde9e8 100%);
+  border-color: #edc0bd;
+}
+
+.fermentation-box-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.fermentation-box-name {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--primary-dark);
+}
+
+.fermentation-box-usage {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+.fermentation-box-status {
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(27, 67, 50, 0.09);
+  color: var(--primary-dark);
+}
+
+.fermentation-box-empty {
+  margin-top: auto;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.fermentation-box-list {
+  display: grid;
+  gap: 8px;
+}
+
+.fermentation-box-entry {
+  border-radius: 14px;
+  padding: 10px 11px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(45, 106, 79, 0.14);
+}
+
+.fermentation-box-entry-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 4px;
+}
+
+.fermentation-box-entry-head strong {
+  font-size: 0.82rem;
+  color: var(--primary-dark);
+  line-height: 1.35;
+}
+
+.fermentation-box-entry-head span {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  background: #eef5ef;
+  border-radius: 999px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.fermentation-box-entry-farmer,
+.fermentation-box-entry-date {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 @media (max-width: 768px) {
   .app-layout { flex-direction: column; }
   .sidebar { width: 100%; min-height: auto; }
@@ -475,6 +730,18 @@ tr:hover td { background: #f0f7f0; }
   .bag-entry-remove {
     width: 100%;
   }
+  .fermentation-picker-row {
+    grid-template-columns: 1fr;
+  }
+  .fermentation-picker-button {
+    width: 100%;
+  }
+  .fermentation-chamber {
+    padding: 14px;
+  }
+  .fermentation-chamber-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -512,6 +779,15 @@ tr:hover td { background: #f0f7f0; }
   .collection-total-pill {
     width: 100%;
     text-align: center;
+  }
+  .fermentation-box-card {
+    min-height: 0;
+  }
+  .fermentation-box-entry-head {
+    flex-direction: column;
+  }
+  .fermentation-box-entry-head span {
+    align-self: flex-start;
   }
 }
 

@@ -4,7 +4,7 @@ import api from '../api/axios';
 const BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
   .flatMap((letter) => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
 
-const MAX_ACTIVE_BATCHES_PER_BOX = 2;
+const MAX_ACTIVE_BATCHES_PER_BOX = 5;
 
 function parseBoxList(value) {
   if (Array.isArray(value)) return value.filter(Boolean);
@@ -61,6 +61,7 @@ export default function Fermentation() {
   const handle = (e) => setForm({ ...form, [e.target.name]: e.target.value });
   const handlePicker = (e) => setPicker({ ...picker, [e.target.name]: e.target.value });
   const handleC = (e) => setCompleteForm({ ...completeForm, [e.target.name]: e.target.value });
+  const formatDate = (date) => (date ? String(date).slice(0, 10) : 'Not set');
 
   const activeBoxes = useMemo(
     () => fermentations
@@ -154,41 +155,20 @@ export default function Fermentation() {
     const formKey = type === 'good' ? 'good_box_ids' : 'bad_box_ids';
     const items = form[formKey];
     if (items.length === 0) {
-      return <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>No boxes selected yet</div>;
+      return <div className="fermentation-empty-selection">No boxes selected yet</div>;
     }
 
     return (
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+      <div className="fermentation-selected-boxes">
         {items.map((box) => (
-          <span
-            key={`${type}-${box}`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '6px 10px',
-              borderRadius: 999,
-              background: '#eef6f0',
-              color: 'var(--primary-dark)',
-              fontSize: '0.82rem',
-              fontWeight: 700,
-            }}
-          >
+          <span key={`${type}-${box}`} className={`fermentation-selected-chip fermentation-selected-chip-${type}`}>
             {box}
             <button
               type="button"
               onClick={() => removeBox(type, box)}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                color: 'var(--primary-dark)',
-                cursor: 'pointer',
-                fontWeight: 700,
-                padding: 0,
-                lineHeight: 1,
-              }}
+              className="fermentation-selected-chip-remove"
             >
-              ×
+              x
             </button>
           </span>
         ))}
@@ -218,11 +198,11 @@ export default function Fermentation() {
     <div>
       <div className="page-header">
         <h1>Fermentation</h1>
-        <p>Assign one batch into multiple fermentation boxes for good beans and bad beans. Each box can still hold up to two active batches.</p>
+        <p>Assign one batch into multiple fermentation boxes for good beans and bad beans. Each box can now hold up to five active batches.</p>
       </div>
 
       <div className="grid-2">
-        <div className="card">
+        <div className="card fermentation-card">
           <h2>Start Fermentation</h2>
           {error && <div className="alert alert-error">{error}</div>}
           {success && <div className="alert alert-success">{success}</div>}
@@ -240,34 +220,34 @@ export default function Fermentation() {
             </div>
             <div className="form-group">
               <label>Good Beans Boxes</label>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <select name="good_box" value={picker.good_box} onChange={handlePicker} style={{ flex: '1 1 220px' }}>
+              <div className="fermentation-picker-row">
+                <select name="good_box" value={picker.good_box} onChange={handlePicker} className="fermentation-picker-select">
                   <option value="">Select box...</option>
                   {renderBoxOptions()}
                 </select>
-                <button className="btn btn-secondary" type="button" onClick={() => addBox('good')}>
+                <button className="btn btn-secondary fermentation-picker-button" type="button" onClick={() => addBox('good')}>
                   Add Box
                 </button>
               </div>
-              <small style={{ color: 'var(--text-muted)' }}>Add one or more boxes for good beans.</small>
+              <small className="compact-help">Add one or more boxes for good beans.</small>
               {renderSelectedBoxes('good')}
             </div>
             <div className="form-group">
               <label>Bad Beans Boxes</label>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                <select name="bad_box" value={picker.bad_box} onChange={handlePicker} style={{ flex: '1 1 220px' }}>
+              <div className="fermentation-picker-row">
+                <select name="bad_box" value={picker.bad_box} onChange={handlePicker} className="fermentation-picker-select">
                   <option value="">Select box...</option>
                   {renderBoxOptions()}
                 </select>
-                <button className="btn btn-secondary" type="button" onClick={() => addBox('bad')}>
+                <button className="btn btn-secondary fermentation-picker-button" type="button" onClick={() => addBox('bad')}>
                   Add Box
                 </button>
               </div>
-              <small style={{ color: 'var(--text-muted)' }}>Leave empty if this batch has no bad beans boxes.</small>
+              <small className="compact-help">Leave empty if this batch has no bad beans boxes.</small>
               {renderSelectedBoxes('bad')}
             </div>
             <div className="form-group">
-              <label>Start Date *</label>
+              <label>Starting Fermentation Date *</label>
               <input name="start_date" type="date" value={form.start_date} onChange={handle} required />
             </div>
             <button className="btn btn-primary" type="submit" disabled={loading}>
@@ -276,7 +256,7 @@ export default function Fermentation() {
           </form>
         </div>
 
-        <div className="card">
+        <div className="card fermentation-card">
           <h2>Complete Fermentation</h2>
           <form onSubmit={complete}>
             <div className="form-group">
@@ -299,43 +279,72 @@ export default function Fermentation() {
             </button>
           </form>
 
-          <div style={{ marginTop: 20 }}>
-            <h2>Box Grid</h2>
-            <div className="box-grid box-grid-12">
+          <div className="fermentation-chamber">
+            <div className="fermentation-chamber-header">
+              <div>
+                <h2>Fermentation Chamber</h2>
+                <p>Live box occupancy with farmer batches and starting fermentation dates.</p>
+              </div>
+              <div className="fermentation-legend">
+                <span className="fermentation-legend-pill fermentation-legend-pill-free">Free</span>
+                <span className="fermentation-legend-pill fermentation-legend-pill-active">In Use</span>
+                <span className="fermentation-legend-pill fermentation-legend-pill-full">Full</span>
+              </div>
+            </div>
+
+            <div className="fermentation-chamber-summary">
+              <div className="fermentation-summary-pill">60 total boxes</div>
+              <div className="fermentation-summary-pill">Up to 5 active batch entries per box</div>
+              <div className="fermentation-summary-pill">Shows farmer, bean type, and start date</div>
+            </div>
+
+            <div className="fermentation-chamber-grid">
               {BOXES.map((box) => {
                 const activeAssignments = activeBoxes[box] || [];
                 const occupiedCount = new Set(activeAssignments.map((item) => item.batch_id)).size;
                 const isFull = occupiedCount >= MAX_ACTIVE_BATCHES_PER_BOX;
                 const isPartiallyUsed = occupiedCount > 0 && !isFull;
+                const stateClass = isFull
+                  ? 'fermentation-box-card-full'
+                  : isPartiallyUsed
+                    ? 'fermentation-box-card-active'
+                    : 'fermentation-box-card-free';
 
                 return (
-                  <div
-                    key={box}
-                    style={{
-                      background: isFull ? '#f8d7da' : isPartiallyUsed ? '#fff3cd' : '#d4edda',
-                      color: isFull ? '#842029' : isPartiallyUsed ? '#856404' : '#0f5132',
-                      borderRadius: 6,
-                      padding: '10px 8px',
-                      textAlign: 'center',
-                      fontSize: '0.8rem',
-                      fontWeight: 700,
-                      minHeight: 116,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'center',
-                      gap: 4,
-                    }}
-                  >
-                    <div>{box}</div>
-                    <div style={{ fontSize: '0.72rem' }}>
-                      {occupiedCount === 0 ? 'Free' : `${occupiedCount}/${MAX_ACTIVE_BATCHES_PER_BOX} used`}
-                    </div>
-                    {activeAssignments.map((item) => (
-                      <div key={`${item.id}-${item.beanLabel}-${box}`} style={{ fontSize: '0.68rem', wordBreak: 'break-word' }}>
-                        {item.batch_code} ({item.beanLabel === 'Good beans' ? 'Good' : 'Bad'})
+                  <article key={box} className={`fermentation-box-card ${stateClass}`}>
+                    <div className="fermentation-box-top">
+                      <div>
+                        <div className="fermentation-box-name">{box}</div>
+                        <div className="fermentation-box-usage">
+                          {occupiedCount === 0 ? 'Free now' : `${occupiedCount}/${MAX_ACTIVE_BATCHES_PER_BOX} used`}
+                        </div>
                       </div>
-                    ))}
-                  </div>
+                      <span className="fermentation-box-status">
+                        {isFull ? 'Full' : isPartiallyUsed ? 'Active' : 'Open'}
+                      </span>
+                    </div>
+
+                    {activeAssignments.length === 0 ? (
+                      <div className="fermentation-box-empty">
+                        Chamber ready for the next farmer beans batch.
+                      </div>
+                    ) : (
+                      <div className="fermentation-box-list">
+                        {activeAssignments.map((item) => (
+                          <div key={`${item.id}-${item.beanLabel}-${box}`} className="fermentation-box-entry">
+                            <div className="fermentation-box-entry-head">
+                              <strong>{item.batch_code}</strong>
+                              <span>{item.beanLabel === 'Good beans' ? 'Good beans' : 'Bad beans'}</span>
+                            </div>
+                            <div className="fermentation-box-entry-farmer">{item.farmer_name}</div>
+                            <div className="fermentation-box-entry-date">
+                              Starting fermentation date: {formatDate(item.start_date)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </article>
                 );
               })}
             </div>
