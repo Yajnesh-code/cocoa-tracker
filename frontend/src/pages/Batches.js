@@ -145,8 +145,12 @@ export default function Batches() {
   const renderBagInputs = (bags, type) => (
     <>
       {bags.map((bag, index) => (
-        <div key={`${type}-${index}`} className="bucket-row" style={{ padding: 12, border: '1px solid var(--border)', borderRadius: 14, background: '#fff' }}>
-          <div>
+        <div key={`${type}-${index}`} className="bag-entry-card">
+          <div className="bag-entry-header">
+            <strong>{type === 'good' ? 'Good' : 'Bad'} Bag {index + 1}</strong>
+          </div>
+          <div className="bag-entry-grid">
+            <div>
             <label>Gross bag weight (kg)</label>
             <input
               type="number"
@@ -156,8 +160,8 @@ export default function Batches() {
               value={bag.weight}
               onChange={(e) => setBag(type, index, 'weight', e.target.value)}
             />
-          </div>
-          <div>
+            </div>
+            <div>
             <label>Empty bag weight (kg)</label>
             <input
               type="number"
@@ -167,10 +171,11 @@ export default function Batches() {
               value={bag.bag_weight}
               onChange={(e) => setBag(type, index, 'bag_weight', e.target.value)}
             />
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+          <div className="bag-entry-actions">
             {bags.length > 1 ? (
-              <button type="button" className="btn btn-sm btn-danger" onClick={() => removeBag(type, index)}>
+              <button type="button" className="btn btn-sm btn-danger bag-entry-remove" onClick={() => removeBag(type, index)}>
                 Remove
               </button>
             ) : null}
@@ -223,7 +228,7 @@ export default function Batches() {
                   Farmer total: {farmerGrandTotal} kg
                 </div>
               </div>
-              <div className="bucket-row">
+              <div className="collection-weight-grid">
                 <div>
                   <label>Farmer good pod weight (kg)</label>
                   <input
