@@ -4,19 +4,48 @@ import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 
 const formatWeight = (value) => `${(parseFloat(value) || 0).toFixed(2)} kg`;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+const normalizeDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
+
+const formatDate = (value) => {
+  const date = normalizeDate(value);
+  if (!date) return 'Not set';
+  return date.toISOString().slice(0, 10);
+};
 
 export default function Dashboard() {
   const { user } = useAuth();
   const [batches, setBatches] = useState([]);
   const [farmers, setFarmers] = useState([]);
+  const [fermentations, setFermentations] = useState([]);
+  const [transferMap, setTransferMap] = useState({});
   const [traceQuery, setTraceQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.get('/batches'), api.get('/farmers')])
-      .then(([b, f]) => {
+    Promise.all([api.get('/batches'), api.get('/farmers'), api.get('/fermentation')])
+      .then(async ([b, f, fermentationRes]) => {
         setBatches(b.data);
         setFarmers(f.data);
+        setFermentations(fermentationRes.data);
+
+        const activeFermentations = fermentationRes.data.filter((item) => item.status === 'active');
+        const transferResponses = await Promise.all(
+          activeFermentations.map((item) =>
+            api.get(`/transfers/${item.batch_id}`)
+              .then((response) => [String(item.batch_id), response.data])
+              .catch(() => [String(item.batch_id), []])
+          )
+        );
+
+        setTransferMap(Object.fromEntries(transferResponses));
       })
       .finally(() => setLoading(false));
   }, []);
@@ -51,6 +80,39 @@ export default function Dashboard() {
   });
 
   const recentBatches = batches.slice(0, 8);
+  const today = normalizeDate(new Date());
+  const transferNotifications = fermentations
+    .filter((item) => item.status === 'active')
+    .map((item) => {
+      const transferHistory = transferMap[String(item.batch_id)] || [];
+      const latestTransfer = transferHistory.reduce((latest, entry) => {
+        const entryTime = normalizeDate(entry.transfer_date);
+        if (!entryTime) return latest;
+        if (!latest) return entry;
+        return entryTime > normalizeDate(latest.transfer_date) ? entry : latest;
+      }, null);
+
+      const referenceDate = latestTransfer?.transfer_date || item.start_date;
+      const normalizedReferenceDate = normalizeDate(referenceDate);
+      const daysSinceMove = normalizedReferenceDate
+        ? Math.floor((today.getTime() - normalizedReferenceDate.getTime()) / MS_PER_DAY)
+        : 0;
+      const isDue = daysSinceMove >= 2;
+      const nextTransferDate = normalizedReferenceDate
+        ? new Date(normalizedReferenceDate.getTime() + (2 * MS_PER_DAY))
+        : null;
+
+      return {
+        ...item,
+        latestTransfer,
+        daysSinceMove,
+        isDue,
+        nextTransferDate,
+        currentBoxes: [item.good_box_id, item.bad_box_id].filter(Boolean).join(' | ') || item.box_id || 'Not assigned',
+      };
+    })
+    .filter((item) => item.isDue)
+    .sort((a, b) => b.daysSinceMove - a.daysSinceMove);
 
   return (
     <div>
@@ -116,6 +178,48 @@ export default function Dashboard() {
                         <div className="stat-chip-value">{inProgressCount}</div>
                       </div>
                     </div>
+                  </div>
+
+                  <div className="soft-panel dashboard-reminder-panel" style={{ marginBottom: 16 }}>
+                    <div className="soft-panel-title">
+                      <div>
+                        <h3>Transfer Due Every 2nd Day</h3>
+                        <p>Active fermentation batches appear here once two days have passed since the start date or latest transfer.</p>
+                      </div>
+                      <span className="dashboard-reminder-count">
+                        {transferNotifications.length} due
+                      </span>
+                    </div>
+
+                    {transferNotifications.length === 0 ? (
+                      <div className="dashboard-reminder-empty">
+                        No active fermentation batch is due for transfer today.
+                      </div>
+                    ) : (
+                      <div className="dashboard-reminder-list">
+                        {transferNotifications.slice(0, 6).map((item) => (
+                          <div key={item.id} className="dashboard-reminder-item">
+                            <div className="dashboard-reminder-main">
+                              <div className="dashboard-reminder-code">{item.batch_code}</div>
+                              <div className="dashboard-reminder-meta">
+                                <span>{item.farmer_name}</span>
+                                <span>Boxes: {item.currentBoxes}</span>
+                                <span>
+                                  Last movement: {item.latestTransfer ? formatDate(item.latestTransfer.transfer_date) : `Fermentation start ${formatDate(item.start_date)}`}
+                                </span>
+                                <span>Next transfer due: {item.nextTransferDate ? formatDate(item.nextTransferDate) : 'Today'}</span>
+                              </div>
+                            </div>
+                            <div className="dashboard-reminder-side">
+                              <div className="dashboard-reminder-badge">
+                                {item.daysSinceMove > 2 ? `${item.daysSinceMove} days waiting` : 'Due today'}
+                              </div>
+                              <Link to="/transfers" className="btn btn-sm btn-primary">Open Transfers</Link>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="table-wrap">
