@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 
-const MAX_ACTIVE_BATCHES_PER_BOX = 2;
+const MAX_ACTIVE_BATCHES_PER_BOX = 5;
 const VALID_BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
   .flatMap((letter) => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
 
