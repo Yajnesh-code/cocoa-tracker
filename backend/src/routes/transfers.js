@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
+const { syncBatchStage } = require('../utils/googleSheetSync');
 
 const MAX_ACTIVE_BATCHES_PER_BOX = 5;
 const VALID_BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
@@ -140,6 +141,25 @@ router.post('/', auth, async (req, res) => {
       [primaryBox, joinBoxes(nextGoodBoxes), joinBoxes(nextBadBoxes), batch_id, 'active']
     );
     await pool.query('COMMIT');
+
+    const transferCountResult = await pool.query(
+      'SELECT COUNT(*)::int AS transfer_count FROM transfers WHERE batch_id = $1',
+      [batch_id]
+    );
+
+    await syncBatchStage(pool, batch_id, {
+      stage: 'Transfer',
+      transfer_count: transferCountResult.rows[0]?.transfer_count || 0,
+      transfer_bean_type: type,
+      from_box: from,
+      to_box: to,
+      transfer_date,
+      fermentation_good_boxes: nextGoodBoxes,
+      fermentation_bad_boxes: nextBadBoxes,
+      fermentation_start_date: fermentation.start_date,
+      fermentation_end_date: fermentation.end_date,
+      status: fermentation.status,
+    });
 
     res.status(201).json(result.rows[0]);
   } catch (err) {

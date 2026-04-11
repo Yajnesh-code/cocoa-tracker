@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
+const { syncBatchStage } = require('../utils/googleSheetSync');
 
 // GET all moisture logs for a batch
 router.get('/:batch_id', auth, async (req, res) => {
@@ -28,6 +29,14 @@ router.post('/', auth, async (req, res) => {
        VALUES ($1, $2, $3) RETURNING *`,
       [batch_id, moisture_pct, log_date]
     );
+
+    await syncBatchStage(pool, batch_id, {
+      stage: 'Moisture',
+      moisture_reading: result.rows[0].moisture_pct,
+      status: 'In Progress',
+      created_at: result.rows[0].log_date,
+    });
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });

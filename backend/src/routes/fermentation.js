@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
+const { syncBatchStage } = require('../utils/googleSheetSync');
 
 const MAX_ACTIVE_BATCHES_PER_BOX = 5;
 const VALID_BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
@@ -147,7 +148,18 @@ router.post('/', auth, async (req, res) => {
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'active') RETURNING *`,
       [batch_id, primaryBox, joinBoxes(goodBoxes), joinBoxes(badBoxes), goodWeight, badWeight, start_date]
     );
-    res.status(201).json(normalizeFermentationRecord(result.rows[0]));
+    const normalizedRecord = normalizeFermentationRecord(result.rows[0]);
+
+    await syncBatchStage(pool, batch_id, {
+      stage: 'Fermentation',
+      fermentation_good_boxes: normalizedRecord.good_box_ids,
+      fermentation_bad_boxes: normalizedRecord.bad_box_ids,
+      fermentation_start_date: normalizedRecord.start_date,
+      fermentation_end_date: normalizedRecord.end_date,
+      status: normalizedRecord.status,
+    });
+
+    res.status(201).json(normalizedRecord);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -169,7 +181,18 @@ router.patch('/:batch_id/complete', auth, async (req, res) => {
     if (!result.rows.length) {
       return res.status(404).json({ error: 'No active fermentation records found for this batch' });
     }
-    res.json(result.rows.map(normalizeFermentationRecord));
+    const normalizedRecords = result.rows.map(normalizeFermentationRecord);
+
+    await syncBatchStage(pool, req.params.batch_id, {
+      stage: 'Fermentation',
+      fermentation_good_boxes: normalizedRecords[0].good_box_ids,
+      fermentation_bad_boxes: normalizedRecords[0].bad_box_ids,
+      fermentation_start_date: normalizedRecords[0].start_date,
+      fermentation_end_date: normalizedRecords[0].end_date,
+      status: normalizedRecords[0].status,
+    });
+
+    res.json(normalizedRecords);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

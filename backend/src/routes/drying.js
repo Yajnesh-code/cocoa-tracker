@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
+const { syncBatchStage } = require('../utils/googleSheetSync');
 
 // GET all drying records with batch details
 router.get('/', auth, async (req, res) => {
@@ -56,6 +57,15 @@ router.post('/', auth, async (req, res) => {
     );
 
     await pool.query('COMMIT');
+
+    await syncBatchStage(pool, batch_id, {
+      stage: 'Drying',
+      drying_shelf: result.rows[0].shelf_id,
+      drying_start_date: result.rows[0].start_date,
+      drying_end_date: result.rows[0].end_date,
+      status: result.rows[0].end_date ? 'Completed' : 'In Progress',
+    });
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     try {
@@ -78,6 +88,15 @@ router.patch('/:batch_id/complete', auth, async (req, res) => {
       [end_date, req.params.batch_id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Drying record not found' });
+
+    await syncBatchStage(pool, req.params.batch_id, {
+      stage: 'Drying',
+      drying_shelf: result.rows[0].shelf_id,
+      drying_start_date: result.rows[0].start_date,
+      drying_end_date: result.rows[0].end_date,
+      status: 'Completed',
+    });
+
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });

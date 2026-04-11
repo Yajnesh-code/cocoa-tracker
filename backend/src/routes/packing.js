@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
+const { syncBatchStage } = require('../utils/googleSheetSync');
 
 // GET packing record by batch
 router.get('/:batch_id', auth, async (req, res) => {
@@ -31,6 +32,14 @@ router.post('/', auth, async (req, res) => {
        RETURNING *`,
       [batch_id, bag_count, final_weight, packing_date]
     );
+
+    await syncBatchStage(pool, batch_id, {
+      stage: 'Packing',
+      packing_date: result.rows[0].packing_date,
+      final_weight: result.rows[0].final_weight,
+      status: 'Done',
+    });
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });

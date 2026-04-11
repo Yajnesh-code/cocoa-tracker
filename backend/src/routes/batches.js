@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
+const { syncBatchStage } = require('../utils/googleSheetSync');
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -440,6 +441,12 @@ router.post('/', auth, async (req, res) => {
         pod_date,
       ]
     );
+
+    await syncBatchStage(pool, result.rows[0].id, {
+      stage: 'Pod Collection',
+      status: 'In Progress',
+    });
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
