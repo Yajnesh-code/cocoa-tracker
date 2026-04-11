@@ -679,10 +679,16 @@ router.post('/sync/selected', auth, async (req, res) => {
       await syncToGoogleSheet(row);
     }
 
+    await syncToGoogleSheet({
+      mode: 'selected_batch_report',
+      batch_codes: traces.map((trace) => trace.batch.batch_code),
+    });
+
     res.json({
       message: 'Selected batches synced to Google Sheet',
       batches_synced: traces.length,
       rows_synced: rows.length,
+      report_rebuilt: true,
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
