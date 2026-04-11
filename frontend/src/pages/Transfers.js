@@ -4,7 +4,7 @@ import api from '../api/axios';
 const BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
   .flatMap((letter) => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
 
-const MAX_ACTIVE_BATCHES_PER_BOX = 2;
+const MAX_ACTIVE_BATCHES_PER_BOX = 5;
 
 function normalizeFermentation(record) {
   const parseBoxList = (value) => {
@@ -25,7 +25,7 @@ function normalizeFermentation(record) {
 
 export default function Transfers() {
   const [batches, setBatches] = useState([]);
-  const [form, setForm] = useState({ batch_id: '', bean_type: 'good', from_box: '', to_box: '', transfer_date: '' });
+  const [form, setForm] = useState({ transfer_scope: 'batch', batch_id: '', bean_type: 'good', from_box: '', to_box: '', transfer_date: '' });
   const [transfers, setTransfers] = useState([]);
   const [fermentations, setFermentations] = useState([]);
   const [dryingRecords, setDryingRecords] = useState([]);
@@ -72,6 +72,14 @@ export default function Transfers() {
   const handle = async (e) => {
     const updated = { ...form, [e.target.name]: e.target.value };
 
+    if (e.target.name === 'transfer_scope') {
+      updated.batch_id = '';
+      updated.from_box = '';
+      updated.to_box = '';
+      setTransfers([]);
+      setCurrentFermentation([]);
+    }
+
     if (e.target.name === 'batch_id') {
       updated.from_box = '';
       updated.to_box = '';
@@ -93,10 +101,15 @@ export default function Transfers() {
     setLoading(true);
     try {
       await api.post('/transfers', form);
-      setSuccess('Transfer recorded!');
+      setSuccess(form.transfer_scope === 'box' ? 'Whole box transferred successfully!' : 'Transfer recorded!');
       await refreshFermentations();
-      await loadBatchDetails(form.batch_id);
-      setForm((f) => ({ ...f, from_box: '', to_box: '', transfer_date: '' }));
+      if (form.batch_id) {
+        await loadBatchDetails(form.batch_id);
+      } else {
+        setTransfers([]);
+        setCurrentFermentation([]);
+      }
+      setForm((f) => ({ ...f, batch_id: form.transfer_scope === 'box' ? '' : f.batch_id, from_box: '', to_box: '', transfer_date: '' }));
     } catch (err) {
       setError(err.response?.data?.error || 'Failed');
     } finally {
@@ -135,6 +148,23 @@ export default function Transfers() {
   }, [currentFermentation]);
 
   const fromOptions = activeLocations.filter((item) => item.type === form.bean_type);
+  const groupedBoxOptions = useMemo(() => {
+    return Object.entries(occupiedBoxes)
+      .map(([box, assignments]) => {
+        const matchingAssignments = assignments.filter((item) =>
+          form.bean_type === 'bad' ? item.beanLabel === 'Bad beans' : item.beanLabel === 'Good beans'
+        );
+        if (!matchingAssignments.length) return null;
+
+        return {
+          box,
+          count: new Set(matchingAssignments.map((item) => item.batch_id)).size,
+          batches: matchingAssignments.map((item) => item.batch_code),
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.box.localeCompare(b.box));
+  }, [occupiedBoxes, form.bean_type]);
   const activeDryingBatchIds = new Set(
     dryingRecords.filter((item) => !item.end_date).map((item) => String(item.batch_id))
   );
@@ -149,7 +179,7 @@ export default function Transfers() {
     <div>
       <div className="page-header">
         <h1>Box Transfers</h1>
-        <p>Move good beans and bad beans separately between fermentation boxes. Each box can hold up to two active batches.</p>
+        <p>Move good beans and bad beans separately between fermentation boxes. Each box can hold up to five active batches.</p>
       </div>
 
       <div className="grid-2">
@@ -159,16 +189,30 @@ export default function Transfers() {
           {success && <div className="alert alert-success">{success}</div>}
           <form onSubmit={submit}>
             <div className="form-group">
-              <label>Batch *</label>
-              <select name="batch_id" value={form.batch_id} onChange={handle} required>
-                <option value="">Select batch...</option>
-                {transferableBatches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.batch_code} - {b.farmer_name}
-                  </option>
-                ))}
+              <label>Transfer Mode *</label>
+              <select name="transfer_scope" value={form.transfer_scope} onChange={handle} required>
+                <option value="batch">Single batch transfer</option>
+                <option value="box">Move whole box together</option>
               </select>
             </div>
+            {form.transfer_scope === 'box' ? (
+              <div className="alert alert-success" style={{ marginBottom: 16 }}>
+                Moving a full box will transfer all matching farmer batches from the selected source box to the new box in one action.
+              </div>
+            ) : null}
+            {form.transfer_scope === 'batch' ? (
+              <div className="form-group">
+                <label>Batch *</label>
+                <select name="batch_id" value={form.batch_id} onChange={handle} required>
+                  <option value="">Select batch...</option>
+                  {transferableBatches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.batch_code} - {b.farmer_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
             <div className="form-group">
               <label>Bean Type *</label>
               <select name="bean_type" value={form.bean_type} onChange={handle} required>
@@ -180,17 +224,33 @@ export default function Transfers() {
               <label>From Box *</label>
               <select name="from_box" value={form.from_box} onChange={handle} required>
                 <option value="">Select...</option>
-                {fromOptions.length === 0 ? (
-                  <option value="" disabled>
-                    No active {form.bean_type} beans box for this batch
-                  </option>
-                ) : (
-                  fromOptions.map((item) => (
-                    <option key={`${item.type}-${item.box}`} value={item.box}>
-                      {item.box} - {item.label}
-                    </option>
-                  ))
-                )}
+                {form.transfer_scope === 'box'
+                  ? (
+                    groupedBoxOptions.length === 0 ? (
+                      <option value="" disabled>
+                        No active {form.bean_type} beans box available
+                      </option>
+                    ) : (
+                      groupedBoxOptions.map((item) => (
+                        <option key={`box-${item.box}`} value={item.box}>
+                          {item.box} - {item.count} batch(es) ({item.batches.join(', ')})
+                        </option>
+                      ))
+                    )
+                  )
+                  : (
+                    fromOptions.length === 0 ? (
+                      <option value="" disabled>
+                        No active {form.bean_type} beans box for this batch
+                      </option>
+                    ) : (
+                      fromOptions.map((item) => (
+                        <option key={`${item.type}-${item.box}`} value={item.box}>
+                          {item.box} - {item.label}
+                        </option>
+                      ))
+                    )
+                  )}
               </select>
             </div>
             <div className="form-group">

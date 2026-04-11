@@ -58,6 +58,10 @@ function buildActiveBoxMap(rows) {
   }, {});
 }
 
+function replaceBox(boxes, from, to) {
+  return uniqueBoxes(boxes.map((box) => (box === from ? to : box)));
+}
+
 // GET all transfers for a batch
 router.get('/:batch_id', auth, async (req, res) => {
   try {
@@ -73,9 +77,15 @@ router.get('/:batch_id', auth, async (req, res) => {
 
 // POST record a transfer
 router.post('/', auth, async (req, res) => {
-  const { batch_id, bean_type, from_box, to_box, transfer_date } = req.body;
-  if (!batch_id || !bean_type || !from_box || !to_box || !transfer_date) {
-    return res.status(400).json({ error: 'batch_id, bean_type, from_box, to_box, and transfer_date are required' });
+  const { batch_id, bean_type, from_box, to_box, transfer_date, transfer_scope } = req.body;
+  const scope = String(transfer_scope || 'batch').toLowerCase();
+
+  if (!bean_type || !from_box || !to_box || !transfer_date) {
+    return res.status(400).json({ error: 'bean_type, from_box, to_box, and transfer_date are required' });
+  }
+
+  if (scope !== 'box' && !batch_id) {
+    return res.status(400).json({ error: 'batch_id is required for single-batch transfer' });
   }
 
   const type = String(bean_type).toLowerCase();
@@ -95,73 +105,112 @@ router.post('/', auth, async (req, res) => {
   }
 
   try {
-    const ferResult = await pool.query(
-      'SELECT * FROM fermentation WHERE batch_id = $1 AND status = $2',
-      [batch_id, 'active']
-    );
-    if (!ferResult.rows[0]) {
-      return res.status(400).json({ error: 'Batch does not have an active fermentation record' });
-    }
+    let activeRecords = [];
+    if (scope === 'box') {
+      const recordsResult = await pool.query(
+        'SELECT * FROM fermentation WHERE status = $1',
+        ['active']
+      );
+      activeRecords = recordsResult.rows.map(normalizeFermentationRecord).filter((record) => {
+        const currentBoxes = type === 'bad' ? record.bad_box_ids : record.good_box_ids;
+        return currentBoxes.includes(from);
+      });
 
-    const fermentation = normalizeFermentationRecord(ferResult.rows[0]);
-    const currentBoxes = type === 'bad' ? fermentation.bad_box_ids : fermentation.good_box_ids;
-    if (!currentBoxes.length) {
-      return res.status(400).json({ error: `${type === 'bad' ? 'Bad' : 'Good'} beans are not currently assigned to any box` });
-    }
-    if (!currentBoxes.includes(from)) {
-      return res.status(400).json({ error: `${type === 'bad' ? 'Bad' : 'Good'} beans are not currently in ${from}` });
+      if (!activeRecords.length) {
+        return res.status(400).json({ error: `No active ${type === 'bad' ? 'bad' : 'good'} beans batches found in ${from}` });
+      }
+    } else {
+      const ferResult = await pool.query(
+        'SELECT * FROM fermentation WHERE batch_id = $1 AND status = $2',
+        [batch_id, 'active']
+      );
+      if (!ferResult.rows[0]) {
+        return res.status(400).json({ error: 'Batch does not have an active fermentation record' });
+      }
+
+      const fermentation = normalizeFermentationRecord(ferResult.rows[0]);
+      const currentBoxes = type === 'bad' ? fermentation.bad_box_ids : fermentation.good_box_ids;
+      if (!currentBoxes.length) {
+        return res.status(400).json({ error: `${type === 'bad' ? 'Bad' : 'Good'} beans are not currently assigned to any box` });
+      }
+      if (!currentBoxes.includes(from)) {
+        return res.status(400).json({ error: `${type === 'bad' ? 'Bad' : 'Good'} beans are not currently in ${from}` });
+      }
+      activeRecords = [fermentation];
     }
 
     const occupied = await pool.query(
-      'SELECT batch_id, box_id, good_box_id, bad_box_id FROM fermentation WHERE status = $1 AND batch_id <> $2',
-      ['active', batch_id]
+      'SELECT batch_id, box_id, good_box_id, bad_box_id FROM fermentation WHERE status = $1',
+      ['active']
     );
     const occupancy = buildActiveBoxMap(occupied.rows);
-    if ((occupancy[to] ? occupancy[to].size : 0) >= MAX_ACTIVE_BATCHES_PER_BOX) {
+    const targetOccupants = new Set((occupancy[to] ? Array.from(occupancy[to]) : []));
+    activeRecords.forEach((record) => targetOccupants.add(record.batch_id));
+    if (targetOccupants.size > MAX_ACTIVE_BATCHES_PER_BOX) {
       return res.status(409).json({ error: `Target box ${to} already has ${MAX_ACTIVE_BATCHES_PER_BOX} active batches` });
     }
 
     await pool.query('BEGIN');
-    const result = await pool.query(
-      `INSERT INTO transfers (batch_id, bean_type, from_box, to_box, transfer_date)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [batch_id, type, from, to, transfer_date]
-    );
+    const createdTransfers = [];
 
-    const sourceBoxes = type === 'bad' ? fermentation.bad_box_ids : fermentation.good_box_ids;
-    const nextSourceBoxes = sourceBoxes.map((box) => (box === from ? to : box));
-    const nextGoodBoxes = type === 'good' ? uniqueBoxes(nextSourceBoxes) : fermentation.good_box_ids;
-    const nextBadBoxes = type === 'bad' ? uniqueBoxes(nextSourceBoxes) : fermentation.bad_box_ids;
-    const primaryBox = joinBoxes(nextGoodBoxes.length ? nextGoodBoxes : nextBadBoxes);
+    for (const record of activeRecords) {
+      const result = await pool.query(
+        `INSERT INTO transfers (batch_id, bean_type, from_box, to_box, transfer_date)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [record.batch_id, type, from, to, transfer_date]
+      );
+      createdTransfers.push(result.rows[0]);
 
-    await pool.query(
-      `UPDATE fermentation
-       SET box_id = $1, good_box_id = $2, bad_box_id = $3
-       WHERE batch_id = $4 AND status = $5`,
-      [primaryBox, joinBoxes(nextGoodBoxes), joinBoxes(nextBadBoxes), batch_id, 'active']
-    );
+      const nextGoodBoxes = type === 'good'
+        ? replaceBox(record.good_box_ids, from, to)
+        : record.good_box_ids;
+      const nextBadBoxes = type === 'bad'
+        ? replaceBox(record.bad_box_ids, from, to)
+        : record.bad_box_ids;
+      const primaryBox = joinBoxes(nextGoodBoxes.length ? nextGoodBoxes : nextBadBoxes);
+
+      await pool.query(
+        `UPDATE fermentation
+         SET box_id = $1, good_box_id = $2, bad_box_id = $3
+         WHERE batch_id = $4 AND status = $5`,
+        [primaryBox, joinBoxes(nextGoodBoxes), joinBoxes(nextBadBoxes), record.batch_id, 'active']
+      );
+    }
     await pool.query('COMMIT');
 
-    const transferCountResult = await pool.query(
-      'SELECT COUNT(*)::int AS transfer_count FROM transfers WHERE batch_id = $1',
-      [batch_id]
-    );
+    for (const record of activeRecords) {
+      const refreshedResult = await pool.query(
+        'SELECT * FROM fermentation WHERE batch_id = $1 AND status = $2',
+        [record.batch_id, 'active']
+      );
+      const refreshed = normalizeFermentationRecord(refreshedResult.rows[0]);
+      const transferCountResult = await pool.query(
+        'SELECT COUNT(*)::int AS transfer_count FROM transfers WHERE batch_id = $1',
+        [record.batch_id]
+      );
 
-    await syncBatchStage(pool, batch_id, {
-      stage: 'Transfer',
-      transfer_count: transferCountResult.rows[0]?.transfer_count || 0,
-      transfer_bean_type: type,
-      from_box: from,
-      to_box: to,
-      transfer_date,
-      fermentation_good_boxes: nextGoodBoxes,
-      fermentation_bad_boxes: nextBadBoxes,
-      fermentation_start_date: fermentation.start_date,
-      fermentation_end_date: fermentation.end_date,
-      status: fermentation.status,
+      await syncBatchStage(pool, record.batch_id, {
+        stage: 'Transfer',
+        transfer_count: transferCountResult.rows[0]?.transfer_count || 0,
+        transfer_bean_type: type,
+        from_box: from,
+        to_box: to,
+        transfer_date,
+        fermentation_good_boxes: refreshed.good_box_ids,
+        fermentation_bad_boxes: refreshed.bad_box_ids,
+        fermentation_start_date: refreshed.start_date,
+        fermentation_end_date: refreshed.end_date,
+        status: refreshed.status,
+      });
+    }
+
+    res.status(201).json({
+      message: scope === 'box'
+        ? `Transferred ${activeRecords.length} batch(es) from ${from} to ${to}`
+        : 'Transfer recorded',
+      transfers: createdTransfers,
+      moved_batches: activeRecords.length,
     });
-
-    res.status(201).json(result.rows[0]);
   } catch (err) {
     try {
       await pool.query('ROLLBACK');
