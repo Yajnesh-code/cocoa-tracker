@@ -79,5 +79,6 @@ async function syncBatchStage(pool, batchId, payload) {
 }
 
 module.exports = {
+  syncToGoogleSheet,
   syncBatchStage,
 };

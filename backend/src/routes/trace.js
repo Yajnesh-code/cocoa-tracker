@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/pool');
 const QRCode = require('qrcode');
+const auth = require('../middleware/auth');
+const { syncToGoogleSheet } = require('../utils/googleSheetSync');
 
 function formatDate(value) {
   return value ? String(value).slice(0, 10) : 'Not recorded';
@@ -50,19 +52,6 @@ function renderListRows(items, columns) {
     .join('');
 }
 
-function getBucketDetails(breaking) {
-  if (!breaking?.bucket_details) return [];
-
-  try {
-    const parsed = typeof breaking.bucket_details === 'string'
-      ? JSON.parse(breaking.bucket_details)
-      : breaking.bucket_details;
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (_) {
-    return [];
-  }
-}
-
 function normalizeFermentationRecord(record) {
   const toBoxList = (value) => {
     if (value === undefined || value === null || value === '') return [];
@@ -86,7 +75,6 @@ function normalizeFermentationRecord(record) {
 function buildBatchTraceSections(items) {
   return items.map(({ batch, breaking, fermentation, transfers, drying, moisture_logs, packing }, index) => {
     const normalizedFermentation = fermentation.map(normalizeFermentationRecord);
-    const bucketDetails = getBucketDetails(breaking);
     const overviewRows = [
       { label: 'Batch Code', value: batch.batch_code },
       { label: 'Farmer', value: batch.farmer_name },
@@ -132,14 +120,6 @@ function buildBatchTraceSections(items) {
       log_date: formatDate(item.log_date),
     }));
 
-    const bucketRows = bucketDetails.map((item, rowIndex) => ({
-      bucket: `Bucket ${rowIndex + 1}`,
-      type: item.type === 'bad' ? 'Bad beans' : 'Good beans',
-      gross_weight: `${formatNumber(item.gross_weight)} kg`,
-      bucket_weight: `${formatNumber(item.bucket_weight)} kg`,
-      net_weight: `${formatNumber(item.good_weight ?? item.bad_weight)} kg`,
-    }));
-
     return `
       <div class="section ${index > 0 ? 'section-break' : ''}">
         <div class="section-title">Batch ${escapeHtml(batch.batch_code)}</div>
@@ -152,30 +132,6 @@ function buildBatchTraceSections(items) {
         <div class="section-title">Breaking</div>
         <table class="kv">
           ${breaking ? renderKeyValueRows(breakingRows) : '<tr><td class="empty" colspan="2">No breaking record available</td></tr>'}
-        </table>
-      </div>
-
-      <div class="section">
-        <div class="section-title">Bucket Breakdown</div>
-        <table>
-          <thead>
-            <tr>
-              <th>Bucket</th>
-              <th>Type</th>
-              <th>Gross Weight</th>
-              <th>Empty Bucket Weight</th>
-              <th>Net Bean Weight</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${renderListRows(bucketRows, [
-              { key: 'bucket' },
-              { key: 'type' },
-              { key: 'gross_weight' },
-              { key: 'bucket_weight' },
-              { key: 'net_weight' },
-            ])}
-          </tbody>
         </table>
       </div>
 
@@ -282,7 +238,6 @@ function buildExcelHtmlReport(data, batchId) {
   const { batch, breaking, fermentation, transfers, drying, moisture_logs, packing } = data;
   const normalizedFermentation = fermentation.map(normalizeFermentationRecord);
   const logoUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/solemulelogo.png`;
-  const bucketDetails = getBucketDetails(breaking);
   const overviewRows = [
     { label: 'Batch Code', value: batch.batch_code },
     { label: 'Farmer', value: batch.farmer_name },
@@ -326,14 +281,6 @@ function buildExcelHtmlReport(data, batchId) {
     day: `Day ${index + 1}`,
     moisture: `${formatNumber(item.moisture_pct)}%`,
     log_date: formatDate(item.log_date),
-  }));
-
-  const bucketRows = bucketDetails.map((item, index) => ({
-    bucket: `Bucket ${index + 1}`,
-    type: item.type === 'bad' ? 'Bad beans' : 'Good beans',
-    gross_weight: `${formatNumber(item.gross_weight)} kg`,
-    bucket_weight: `${formatNumber(item.bucket_weight)} kg`,
-    net_weight: `${formatNumber(item.good_weight ?? item.bad_weight)} kg`,
   }));
 
   return `
@@ -423,9 +370,9 @@ function buildExcelHtmlReport(data, batchId) {
         <div class="report-header">
           <img src="${escapeHtml(logoUrl)}" alt="Company Logo" class="report-logo" />
           <div>
-            <h1>Batch Traceability Report</h1>
-            <div class="subtitle">Formatted export for batch ${escapeHtml(batch.batch_code || batchId)}</div>
-          </div>
+        <h1>Batch Summary Report</h1>
+        <div class="subtitle">Clean single-sheet export for batch ${escapeHtml(batch.batch_code || batchId)}</div>
+      </div>
         </div>
 
         <div class="section">
@@ -439,30 +386,6 @@ function buildExcelHtmlReport(data, batchId) {
           <div class="section-title">Breaking</div>
           <table class="kv">
             ${breaking ? renderKeyValueRows(breakingRows) : '<tr><td class="empty" colspan="2">No breaking record available</td></tr>'}
-          </table>
-        </div>
-
-        <div class="section">
-          <div class="section-title">Bucket Breakdown</div>
-          <table>
-            <thead>
-              <tr>
-                <th>Bucket</th>
-                <th>Type</th>
-                <th>Gross Weight</th>
-                <th>Empty Bucket Weight</th>
-                <th>Net Bean Weight</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${renderListRows(bucketRows, [
-                { key: 'bucket' },
-                { key: 'type' },
-                { key: 'gross_weight' },
-                { key: 'bucket_weight' },
-                { key: 'net_weight' },
-              ])}
-            </tbody>
           </table>
         </div>
 
@@ -602,7 +525,7 @@ function buildMultiBatchExcelHtmlReport(items) {
           <img src="${escapeHtml(logoUrl)}" alt="Company Logo" class="report-logo" />
           <div>
             <h1>Selected Batch Traceability Report</h1>
-            <div class="subtitle">Single-sheet Excel export for the selected batch codes only.</div>
+            <div class="subtitle">Single-sheet Excel export for the selected batch codes only, optimized for Google Sheets.</div>
           </div>
         </div>
         ${buildBatchTraceSections(items)}
@@ -638,6 +561,133 @@ async function fetchBatchTrace(batchId) {
     packing: packing.rows[0] || null,
   };
 }
+
+function buildGoogleSheetRows(traceData) {
+  const { batch, breaking, fermentation, transfers, drying, moisture_logs, packing } = traceData;
+  const basePayload = {
+    batch_code: batch.batch_code,
+    farmer_code: batch.farmer_code,
+    farmer_name: batch.farmer_name,
+    location: batch.location,
+    pod_date: formatDate(batch.pod_date),
+    farmer_good_weight: Number(batch.farmer_pod_weight || 0),
+    farmer_bad_weight: Number(batch.farmer_bad_pod_weight || 0),
+    company_good_weight: Number(batch.pod_weight || 0),
+    company_bad_weight: Number(batch.bad_pod_weight || 0),
+  };
+
+  const rows = [
+    {
+      ...basePayload,
+      stage: 'Pod Collection',
+      status: packing ? 'Done' : 'In Progress',
+    },
+  ];
+
+  if (breaking) {
+    rows.push({
+      ...basePayload,
+      stage: 'Breaking',
+      wet_weight: Number(breaking.wet_weight || 0),
+      good_bean_weight: Number(breaking.good_weight || 0),
+      bad_bean_weight: Number(breaking.bad_weight || 0),
+      breaking_date: formatDate(breaking.breaking_date),
+      status: packing ? 'Done' : 'In Progress',
+    });
+  }
+
+  fermentation.map(normalizeFermentationRecord).forEach((item) => {
+    rows.push({
+      ...basePayload,
+      stage: 'Fermentation',
+      fermentation_good_boxes: item.good_box_ids,
+      fermentation_bad_boxes: item.bad_box_ids,
+      fermentation_start_date: formatDate(item.start_date),
+      fermentation_end_date: formatDate(item.end_date),
+      status: item.status,
+    });
+  });
+
+  transfers.forEach((item, index) => {
+    rows.push({
+      ...basePayload,
+      stage: 'Transfer',
+      transfer_count: index + 1,
+      transfer_bean_type: item.bean_type === 'bad' ? 'bad' : 'good',
+      from_box: item.from_box,
+      to_box: item.to_box,
+      transfer_date: formatDate(item.transfer_date),
+      status: packing ? 'Done' : 'In Progress',
+    });
+  });
+
+  if (drying) {
+    rows.push({
+      ...basePayload,
+      stage: 'Drying',
+      drying_shelf: drying.shelf_id,
+      drying_start_date: formatDate(drying.start_date),
+      drying_end_date: formatDate(drying.end_date),
+      status: drying.end_date ? 'Completed' : 'In Progress',
+    });
+  }
+
+  moisture_logs.forEach((item) => {
+    rows.push({
+      ...basePayload,
+      stage: 'Moisture',
+      moisture_reading: Number(item.moisture_pct || 0),
+      created_at: formatDate(item.log_date),
+      status: packing ? 'Done' : 'In Progress',
+    });
+  });
+
+  if (packing) {
+    rows.push({
+      ...basePayload,
+      stage: 'Packing',
+      packing_date: formatDate(packing.packing_date),
+      final_weight: Number(packing.final_weight || 0),
+      status: 'Done',
+    });
+  }
+
+  return rows;
+}
+
+router.post('/sync/selected', auth, async (req, res) => {
+  const batchIds = Array.isArray(req.body.batch_ids)
+    ? req.body.batch_ids.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0)
+    : [];
+
+  if (batchIds.length === 0) {
+    return res.status(400).json({ error: 'Select at least one batch' });
+  }
+
+  if (!process.env.GOOGLE_SHEET_WEBHOOK_URL) {
+    return res.status(400).json({ error: 'Google Sheet webhook URL is not configured on the backend' });
+  }
+
+  try {
+    const traces = (await Promise.all(batchIds.map((batchId) => fetchBatchTrace(batchId)))).filter(Boolean);
+    if (!traces.length) {
+      return res.status(404).json({ error: 'No batches found' });
+    }
+
+    const rows = traces.flatMap((trace) => buildGoogleSheetRows(trace));
+    for (const row of rows) {
+      await syncToGoogleSheet(row);
+    }
+
+    res.json({
+      message: 'Selected batches synced to Google Sheet',
+      batches_synced: traces.length,
+      rows_synced: rows.length,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET formatted Excel-friendly summary for multiple batches
 router.get('/export/selected', async (req, res) => {

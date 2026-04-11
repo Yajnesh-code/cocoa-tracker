@@ -6,6 +6,8 @@ export default function FarmerExport() {
   const [selectedBatchIds, setSelectedBatchIds] = useState([]);
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [success, setSuccess] = useState('');
 
   useEffect(() => {
     api.get('/batches')
@@ -23,6 +25,7 @@ export default function FarmerExport() {
     if (selectedBatchIds.length === 0) return;
 
     setError('');
+    setSuccess('');
     setDownloading(true);
 
     try {
@@ -46,28 +49,58 @@ export default function FarmerExport() {
     }
   };
 
+  const syncSelectedToGoogleSheet = async () => {
+    if (selectedBatchIds.length === 0) return;
+
+    setError('');
+    setSuccess('');
+    setSyncing(true);
+
+    try {
+      const response = await api.post('/trace/sync/selected', {
+        batch_ids: selectedBatchIds,
+      });
+      setSuccess(`${response.data.rows_synced} rows synced for ${response.data.batches_synced} selected batch(es).`);
+    } catch (err) {
+      setError((err.response && err.response.data && err.response.data.error) || 'Failed to sync selected batches');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
         <h1>Batch Excel Export</h1>
-        <p>Select one or more batch codes and download one complete Excel sheet with the same farmer/company collection totals shown in trace and summary pages.</p>
+        <p>Select batch codes and either download one Excel sheet or backfill those previous records into your Google Sheet.</p>
       </div>
 
       <div className="card">
         <h2>Select Batch Codes</h2>
+        {success ? <div className="alert alert-success">{success}</div> : null}
         {error ? <div className="alert alert-error">{error}</div> : null}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
             Selected batches: <strong>{selectedBatchIds.length}</strong>
           </div>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={downloadExcel}
-            disabled={selectedBatchIds.length === 0 || downloading}
-          >
-            {downloading ? 'Downloading...' : 'Download Excel Sheet'}
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={syncSelectedToGoogleSheet}
+              disabled={selectedBatchIds.length === 0 || syncing}
+            >
+              {syncing ? 'Syncing...' : 'Send Selected Batches to Google Sheet'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={downloadExcel}
+              disabled={selectedBatchIds.length === 0 || downloading}
+            >
+              {downloading ? 'Downloading...' : 'Download Excel Sheet'}
+            </button>
+          </div>
         </div>
 
         <div className="table-wrap">
