@@ -6,6 +6,7 @@ export default function FarmerExport() {
   const [selectedBatchIds, setSelectedBatchIds] = useState([]);
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState(false);
+  const [syncingDaily, setSyncingDaily] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [success, setSuccess] = useState('');
 
@@ -68,17 +69,47 @@ export default function FarmerExport() {
     }
   };
 
+  const syncDailyToGoogleSheet = async () => {
+    setError('');
+    setSuccess('');
+    setSyncingDaily(true);
+
+    try {
+      const response = await api.post('/trace/sync/daily');
+      setSuccess(`Daily report rebuilt from the beginning for ${response.data.batches_synced} batch(es) and ${response.data.rows_synced} row(s). Selected_Batch_Report was not changed.`);
+    } catch (err) {
+      setError((err.response && err.response.data && err.response.data.error) || 'Failed to sync daily report');
+    } finally {
+      setSyncingDaily(false);
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
         <h1>Batch Excel Export</h1>
-        <p>Select batch codes and either download one Excel sheet or rebuild only the Selected_Batch_Report tab in your Google Sheet.</p>
+        <p>Rebuild two Google Sheet tabs here: Daily_Report for all data from the beginning, or Selected_Batch_Report for only the batch codes you pick below.</p>
       </div>
 
       <div className="card">
-        <h2>Select Batch Codes</h2>
+        <h2>Google Sheet Reports</h2>
         {success ? <div className="alert alert-success">{success}</div> : null}
         {error ? <div className="alert alert-error">{error}</div> : null}
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+          <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+            Rebuild the full daily report from the start of the system without changing the selected-batch tab.
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={syncDailyToGoogleSheet}
+            disabled={syncingDaily}
+          >
+            {syncingDaily ? 'Syncing Daily...' : 'Rebuild Daily Report'}
+          </button>
+        </div>
+
+        <h2>Select Batch Codes</h2>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
           <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
             Selected batches: <strong>{selectedBatchIds.length}</strong>
