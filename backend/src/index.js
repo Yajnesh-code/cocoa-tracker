@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const initDB = require('./db/init');
+const { setupNotificationScheduler } = require('./utils/notificationScheduler');
 
 const app = express();
 
@@ -44,6 +45,7 @@ app.use('/api/drying', require('./routes/drying'));
 app.use('/api/moisture', require('./routes/moisture'));
 app.use('/api/packing', require('./routes/packing'));
 app.use('/api/trace', require('./routes/trace'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
@@ -52,6 +54,9 @@ const PORT = process.env.PORT || 5000;
 
 initDB()
   .then(() => {
+    // Setup notification scheduler
+    setupNotificationScheduler();
+    
     app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   })
   .catch((err) => {

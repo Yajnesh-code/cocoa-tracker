@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const { syncBatchStage } = require('../utils/googleSheetSync');
+const { notifyTransfer } = require('../utils/notificationHelper');
 
 const MAX_ACTIVE_BATCHES_PER_BOX = 5;
 const VALID_BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
@@ -202,6 +203,9 @@ router.post('/', auth, async (req, res) => {
         fermentation_end_date: refreshed.end_date,
         status: refreshed.status,
       });
+
+      // Create notification for transfer
+      await notifyTransfer(record.batch_id, from, to, transfer_date);
     }
 
     res.status(201).json({

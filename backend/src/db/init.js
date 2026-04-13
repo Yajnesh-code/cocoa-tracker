@@ -134,6 +134,20 @@ async function initDB() {
         packing_date DATE NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+
+      -- NOTIFICATIONS
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        batch_id INTEGER REFERENCES batches(id) ON DELETE CASCADE,
+        message TEXT NOT NULL,
+        notification_type VARCHAR(50) NOT NULL,
+        notification_date DATE NOT NULL,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS notifications_batch_id_idx ON notifications(batch_id);
+      CREATE INDEX IF NOT EXISTS notifications_date_idx ON notifications(notification_date);
+      ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
     `);
     console.log('Database schema initialized');
   } finally {

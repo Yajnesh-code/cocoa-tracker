@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db/pool');
 const auth = require('../middleware/auth');
 const { syncBatchStage } = require('../utils/googleSheetSync');
+const { notifyFermentationStart } = require('../utils/notificationHelper');
 
 const MAX_ACTIVE_BATCHES_PER_BOX = 5;
 const VALID_BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
@@ -158,6 +159,9 @@ router.post('/', auth, async (req, res) => {
       fermentation_end_date: normalizedRecord.end_date,
       status: normalizedRecord.status,
     });
+
+    // Create notification when fermentation starts
+    await notifyFermentationStart(batch_id, primaryBox, start_date);
 
     res.status(201).json(normalizedRecord);
   } catch (err) {
