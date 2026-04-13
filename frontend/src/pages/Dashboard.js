@@ -85,6 +85,7 @@ export default function Dashboard() {
     .filter((item) => item.status === 'active')
     .map((item) => {
       const transferHistory = transferMap[String(item.batch_id)] || [];
+      const hasTransfers = transferHistory.length > 0;
       const latestTransfer = transferHistory.reduce((latest, entry) => {
         const entryTime = normalizeDate(entry.transfer_date);
         if (!entryTime) return latest;
@@ -94,16 +95,19 @@ export default function Dashboard() {
 
       const referenceDate = latestTransfer?.transfer_date || item.start_date;
       const normalizedReferenceDate = normalizeDate(referenceDate);
+      const cadenceDays = hasTransfers ? 1 : 2;
       const daysSinceMove = normalizedReferenceDate
         ? Math.floor((today.getTime() - normalizedReferenceDate.getTime()) / MS_PER_DAY)
         : 0;
-      const isDue = daysSinceMove >= 2;
+      const isDue = daysSinceMove >= cadenceDays;
       const nextTransferDate = normalizedReferenceDate
-        ? new Date(normalizedReferenceDate.getTime() + (2 * MS_PER_DAY))
+        ? new Date(normalizedReferenceDate.getTime() + (cadenceDays * MS_PER_DAY))
         : null;
 
       return {
         ...item,
+        hasTransfers,
+        cadenceDays,
         latestTransfer,
         daysSinceMove,
         isDue,
@@ -183,8 +187,8 @@ export default function Dashboard() {
                   <div className="soft-panel dashboard-reminder-panel" style={{ marginBottom: 16 }}>
                     <div className="soft-panel-title">
                       <div>
-                        <h3>Transfer Due Every 2nd Day</h3>
-                        <p>Active fermentation batches appear here once two days have passed since the start date or latest transfer.</p>
+                        <h3>Transfer Alerts</h3>
+                        <p>First transfer alert comes after 2 days from fermentation start. After the first transfer, the same batch will alert daily for the next move.</p>
                       </div>
                       <span className="dashboard-reminder-count">
                         {transferNotifications.length} due
@@ -204,6 +208,7 @@ export default function Dashboard() {
                               <div className="dashboard-reminder-meta">
                                 <span>{item.farmer_name}</span>
                                 <span>Boxes: {item.currentBoxes}</span>
+                                <span>Rule: {item.hasTransfers ? 'Daily transfer reminder' : 'First transfer after 2 days'}</span>
                                 <span>
                                   Last movement: {item.latestTransfer ? formatDate(item.latestTransfer.transfer_date) : `Fermentation start ${formatDate(item.start_date)}`}
                                 </span>
@@ -212,7 +217,9 @@ export default function Dashboard() {
                             </div>
                             <div className="dashboard-reminder-side">
                               <div className="dashboard-reminder-badge">
-                                {item.daysSinceMove > 2 ? `${item.daysSinceMove} days waiting` : 'Due today'}
+                                {item.hasTransfers
+                                  ? (item.daysSinceMove > 1 ? `${item.daysSinceMove} days waiting` : 'Daily move due')
+                                  : (item.daysSinceMove > 2 ? `${item.daysSinceMove} days waiting` : 'First move due')}
                               </div>
                               <Link to="/transfers" className="btn btn-sm btn-primary">Open Transfers</Link>
                             </div>
