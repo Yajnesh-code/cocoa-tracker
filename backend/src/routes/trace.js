@@ -72,6 +72,27 @@ function normalizeFermentationRecord(record) {
   };
 }
 
+function getStageCreatedAt(stage, source = {}) {
+  switch (stage) {
+    case 'Pod Collection':
+      return formatDate(source.pod_date);
+    case 'Breaking':
+      return formatDate(source.breaking_date);
+    case 'Fermentation':
+      return formatDate(source.start_date);
+    case 'Transfer':
+      return formatDate(source.transfer_date);
+    case 'Drying':
+      return formatDate(source.start_date);
+    case 'Moisture':
+      return formatDate(source.log_date);
+    case 'Packing':
+      return formatDate(source.packing_date);
+    default:
+      return '';
+  }
+}
+
 function buildBatchTraceSections(items) {
   return items.map(({ batch, breaking, fermentation, transfers, drying, moisture_logs, packing }, index) => {
     const normalizedFermentation = fermentation.map(normalizeFermentationRecord);
@@ -579,6 +600,7 @@ function buildGoogleSheetRows(traceData) {
   const rows = [
     {
       ...basePayload,
+      created_at: getStageCreatedAt('Pod Collection', batch),
       stage: 'Pod Collection',
       status: packing ? 'Done' : 'In Progress',
     },
@@ -587,6 +609,7 @@ function buildGoogleSheetRows(traceData) {
   if (breaking) {
     rows.push({
       ...basePayload,
+      created_at: getStageCreatedAt('Breaking', breaking),
       stage: 'Breaking',
       wet_weight: Number(breaking.wet_weight || 0),
       good_bean_weight: Number(breaking.good_weight || 0),
@@ -599,6 +622,7 @@ function buildGoogleSheetRows(traceData) {
   fermentation.map(normalizeFermentationRecord).forEach((item) => {
     rows.push({
       ...basePayload,
+      created_at: getStageCreatedAt('Fermentation', item),
       stage: 'Fermentation',
       fermentation_good_boxes: item.good_box_ids,
       fermentation_bad_boxes: item.bad_box_ids,
@@ -611,6 +635,7 @@ function buildGoogleSheetRows(traceData) {
   transfers.forEach((item, index) => {
     rows.push({
       ...basePayload,
+      created_at: getStageCreatedAt('Transfer', item),
       stage: 'Transfer',
       transfer_count: index + 1,
       transfer_bean_type: item.bean_type === 'bad' ? 'bad' : 'good',
@@ -624,6 +649,7 @@ function buildGoogleSheetRows(traceData) {
   if (drying) {
     rows.push({
       ...basePayload,
+      created_at: getStageCreatedAt('Drying', drying),
       stage: 'Drying',
       drying_shelf: drying.shelf_id,
       drying_start_date: formatDate(drying.start_date),
@@ -637,7 +663,7 @@ function buildGoogleSheetRows(traceData) {
       ...basePayload,
       stage: 'Moisture',
       moisture_reading: Number(item.moisture_pct || 0),
-      created_at: formatDate(item.log_date),
+      created_at: getStageCreatedAt('Moisture', item),
       status: packing ? 'Done' : 'In Progress',
     });
   });
@@ -645,6 +671,7 @@ function buildGoogleSheetRows(traceData) {
   if (packing) {
     rows.push({
       ...basePayload,
+      created_at: getStageCreatedAt('Packing', packing),
       stage: 'Packing',
       packing_date: formatDate(packing.packing_date),
       final_weight: Number(packing.final_weight || 0),
@@ -654,6 +681,55 @@ function buildGoogleSheetRows(traceData) {
 
   return rows;
 }
+
+function parseBatchIds(value) {
+  return String(value || '')
+    .split(',')
+    .map((id) => Number(id.trim()))
+    .filter((id) => Number.isInteger(id) && id > 0);
+}
+
+async function fetchAllBatchIds() {
+  const result = await pool.query(
+    'SELECT id FROM batches ORDER BY pod_date ASC, created_at ASC, id ASC'
+  );
+  return result.rows.map((row) => row.id);
+}
+
+router.post('/sync/daily', auth, async (req, res) => {
+  if (!process.env.GOOGLE_SHEET_WEBHOOK_URL) {
+    return res.status(400).json({ error: 'Google Sheet webhook URL is not configured on the backend' });
+  }
+
+  try {
+    const batchIds = await fetchAllBatchIds();
+    if (!batchIds.length) {
+      return res.status(404).json({ error: 'No batches found' });
+    }
+
+    const traces = (await Promise.all(batchIds.map((batchId) => fetchBatchTrace(batchId)))).filter(Boolean);
+    const rows = traces.flatMap((trace) => buildGoogleSheetRows(trace));
+
+    await syncToGoogleSheet({
+      mode: 'daily_report',
+      tab_name: 'Daily_Report',
+      replace_tab: true,
+      preserve_other_tabs: true,
+      batch_codes: traces.map((trace) => trace.batch.batch_code),
+      rows,
+    });
+
+    res.json({
+      message: 'Daily report rebuilt in Google Sheet',
+      batches_synced: traces.length,
+      rows_synced: rows.length,
+      report_rebuilt: true,
+      tab_name: 'Daily_Report',
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.post('/sync/selected', auth, async (req, res) => {
   const batchIds = Array.isArray(req.body.batch_ids)
@@ -674,16 +750,23 @@ router.post('/sync/selected', auth, async (req, res) => {
       return res.status(404).json({ error: 'No batches found' });
     }
 
+    const rows = traces.flatMap((trace) => buildGoogleSheetRows(trace));
+
     await syncToGoogleSheet({
       mode: 'selected_batch_report',
+      tab_name: 'Selected_Batch_Report',
+      replace_tab: true,
+      preserve_other_tabs: true,
       batch_codes: traces.map((trace) => trace.batch.batch_code),
+      rows,
     });
 
     res.json({
       message: 'Selected batch report rebuilt in Google Sheet',
       batches_synced: traces.length,
-      rows_synced: 0,
+      rows_synced: rows.length,
       report_rebuilt: true,
+      tab_name: 'Selected_Batch_Report',
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -692,10 +775,7 @@ router.post('/sync/selected', auth, async (req, res) => {
 
 // GET formatted Excel-friendly summary for multiple batches
 router.get('/export/selected', async (req, res) => {
-  const batchIds = String(req.query.batch_ids || '')
-    .split(',')
-    .map((id) => Number(id.trim()))
-    .filter((id) => Number.isInteger(id) && id > 0);
+  const batchIds = parseBatchIds(req.query.batch_ids);
 
   if (batchIds.length === 0) {
     return res.status(400).json({ error: 'Select at least one batch' });
