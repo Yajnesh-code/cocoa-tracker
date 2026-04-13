@@ -60,7 +60,7 @@ export default function FarmerExport() {
       const response = await api.post('/trace/sync/selected', {
         batch_ids: selectedBatchIds,
       });
-      setSuccess(`${response.data.rows_synced} rows synced for ${response.data.batches_synced} selected batch(es).`);
+      setSuccess(`Selected batch report rebuilt for ${response.data.batches_synced} batch(es). Dashboard and Daily Entries were not changed.`);
     } catch (err) {
       setError((err.response && err.response.data && err.response.data.error) || 'Failed to sync selected batches');
     } finally {
@@ -72,7 +72,7 @@ export default function FarmerExport() {
     <div>
       <div className="page-header">
         <h1>Batch Excel Export</h1>
-        <p>Select batch codes and either download one Excel sheet or backfill those previous records into your Google Sheet.</p>
+        <p>Select batch codes and either download one Excel sheet or rebuild only the Selected_Batch_Report tab in your Google Sheet.</p>
       </div>
 
       <div className="card">
@@ -90,7 +90,7 @@ export default function FarmerExport() {
               onClick={syncSelectedToGoogleSheet}
               disabled={selectedBatchIds.length === 0 || syncing}
             >
-              {syncing ? 'Syncing...' : 'Send Selected Batches to Google Sheet'}
+              {syncing ? 'Syncing...' : 'Rebuild Selected Batch Report'}
             </button>
             <button
               type="button"
