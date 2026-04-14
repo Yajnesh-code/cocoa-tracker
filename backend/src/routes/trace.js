@@ -682,6 +682,23 @@ function buildGoogleSheetRows(traceData) {
   return rows;
 }
 
+function buildCompletedWeightRow(traceData) {
+  const { batch, drying, packing } = traceData;
+
+  if (!drying?.end_date && !packing) return null;
+
+  return {
+    batch_code: batch.batch_code,
+    farmer_code: batch.farmer_code,
+    farmer_name: batch.farmer_name,
+    location: batch.location,
+    drying_date: formatDate(drying?.end_date),
+    total_dry_weight: drying?.total_dry_weight ?? '',
+    packing_date: formatDate(packing?.packing_date),
+    final_weight: packing?.final_weight ?? '',
+  };
+}
+
 function parseBatchIds(value) {
   return String(value || '')
     .split(',')
@@ -767,6 +784,44 @@ router.post('/sync/selected', auth, async (req, res) => {
       rows_synced: rows.length,
       report_rebuilt: true,
       tab_name: 'Selected_Batch_Report',
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/sync/completed', auth, async (req, res) => {
+  if (!process.env.GOOGLE_SHEET_COMPLETED_WEIGHT_URL) {
+    return res.status(400).json({ error: 'Completed weight Google Sheet webhook URL is not configured on the backend' });
+  }
+
+  try {
+    const batchIds = await fetchAllBatchIds();
+    if (!batchIds.length) {
+      return res.status(404).json({ error: 'No batches found' });
+    }
+
+    const traces = (await Promise.all(batchIds.map((batchId) => fetchBatchTrace(batchId)))).filter(Boolean);
+    const rows = traces
+      .map((trace) => buildCompletedWeightRow(trace))
+      .filter(Boolean);
+
+    await syncToGoogleSheet(
+      {
+        mode: 'completed_weight_report',
+        tab_name: 'Completed_Weight_Report',
+        replace_tab: true,
+        preserve_other_tabs: true,
+        rows,
+      },
+      process.env.GOOGLE_SHEET_COMPLETED_WEIGHT_URL
+    );
+
+    res.json({
+      message: 'Completed drying and packing report rebuilt in Google Sheet',
+      batches_synced: rows.length,
+      report_rebuilt: true,
+      tab_name: 'Completed_Weight_Report',
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

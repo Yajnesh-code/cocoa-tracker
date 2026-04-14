@@ -16,11 +16,11 @@ function formatBoxValue(value) {
   return value || '';
 }
 
-async function syncToGoogleSheet(payload) {
-  if (!process.env.GOOGLE_SHEET_WEBHOOK_URL) return;
+async function syncToGoogleSheet(payload, webhookUrl = process.env.GOOGLE_SHEET_WEBHOOK_URL) {
+  if (!webhookUrl) return;
 
   try {
-    await fetch(process.env.GOOGLE_SHEET_WEBHOOK_URL, {
+    await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
