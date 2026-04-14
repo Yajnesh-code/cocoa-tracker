@@ -51,7 +51,7 @@ router.post('/', auth, async (req, res) => {
     const result = await pool.query(
       `INSERT INTO drying (batch_id, shelf_id, start_date)
        VALUES ($1, $2, $3)
-       ON CONFLICT (batch_id) DO UPDATE SET shelf_id = $2, start_date = $3, end_date = NULL
+       ON CONFLICT (batch_id) DO UPDATE SET shelf_id = $2, start_date = $3, end_date = NULL, total_dry_weight = NULL
        RETURNING *`,
       [batch_id, shelf_id, start_date]
     );
@@ -79,21 +79,30 @@ router.post('/', auth, async (req, res) => {
 
 // PATCH complete drying
 router.patch('/:batch_id/complete', auth, async (req, res) => {
-  const { end_date } = req.body;
-  if (!end_date) return res.status(400).json({ error: 'end_date is required' });
+  const { end_date, total_dry_weight } = req.body;
+  if (!end_date || total_dry_weight === undefined || total_dry_weight === null || total_dry_weight === '') {
+    return res.status(400).json({ error: 'end_date and total_dry_weight are required' });
+  }
 
   try {
+    const parsedDryWeight = Number(total_dry_weight);
+    if (Number.isNaN(parsedDryWeight) || parsedDryWeight < 0) {
+      return res.status(400).json({ error: 'total_dry_weight must be a valid non-negative number' });
+    }
+
     const result = await pool.query(
-      'UPDATE drying SET end_date = $1 WHERE batch_id = $2 RETURNING *',
-      [end_date, req.params.batch_id]
+      'UPDATE drying SET end_date = $1, total_dry_weight = $2 WHERE batch_id = $3 RETURNING *',
+      [end_date, parsedDryWeight, req.params.batch_id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Drying record not found' });
 
     await syncBatchStage(pool, req.params.batch_id, {
       stage: 'Drying',
+      drying_date: result.rows[0].end_date,
       drying_shelf: result.rows[0].shelf_id,
       drying_start_date: result.rows[0].start_date,
       drying_end_date: result.rows[0].end_date,
+      total_dry_weight: result.rows[0].total_dry_weight,
       status: 'Completed',
     });
 

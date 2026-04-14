@@ -113,8 +113,12 @@ async function initDB() {
         shelf_id VARCHAR(50) NOT NULL,
         start_date DATE NOT NULL,
         end_date DATE,
+        total_dry_weight NUMERIC(10,2),
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+
+      ALTER TABLE drying
+      ADD COLUMN IF NOT EXISTS total_dry_weight NUMERIC(10,2);
 
       -- MOISTURE LOGS
       CREATE TABLE IF NOT EXISTS moisture_logs (
