@@ -7,6 +7,7 @@ export default function FarmerExport() {
   const [error, setError] = useState('');
   const [downloading, setDownloading] = useState(false);
   const [syncingDaily, setSyncingDaily] = useState(false);
+  const [syncingCompleted, setSyncingCompleted] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [success, setSuccess] = useState('');
 
@@ -84,6 +85,21 @@ export default function FarmerExport() {
     }
   };
 
+  const syncCompletedToGoogleSheet = async () => {
+    setError('');
+    setSuccess('');
+    setSyncingCompleted(true);
+
+    try {
+      const response = await api.post('/trace/sync/completed');
+      setSuccess(`Completed drying and packing report rebuilt for ${response.data.batches_synced} batch(es). Daily_Report and Selected_Batch_Report were not changed.`);
+    } catch (err) {
+      setError((err.response && err.response.data && err.response.data.error) || 'Failed to sync completed drying and packing report');
+    } finally {
+      setSyncingCompleted(false);
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -99,14 +115,24 @@ export default function FarmerExport() {
           <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
             Rebuild the full daily report from the start of the system without changing the selected-batch tab.
           </div>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={syncDailyToGoogleSheet}
-            disabled={syncingDaily}
-          >
-            {syncingDaily ? 'Syncing Daily...' : 'Rebuild Daily Report'}
-          </button>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={syncDailyToGoogleSheet}
+              disabled={syncingDaily}
+            >
+              {syncingDaily ? 'Syncing Daily...' : 'Rebuild Daily Report'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={syncCompletedToGoogleSheet}
+              disabled={syncingCompleted}
+            >
+              {syncingCompleted ? 'Syncing Completed...' : 'Rebuild Completed Weight Report'}
+            </button>
+          </div>
         </div>
 
         <h2>Select Batch Codes</h2>
