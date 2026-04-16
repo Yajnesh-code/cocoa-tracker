@@ -73,18 +73,19 @@ export default function DryingRoomList() {
                 <th>Drying Status</th>
                 <th>Packing Date</th>
                 <th>Packing Status</th>
+                <th>Trace</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
                     Loading drying room records...
                   </td>
                 </tr>
               ) : records.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
                     No batches have entered the drying room yet
                   </td>
                 </tr>
@@ -106,6 +107,16 @@ export default function DryingRoomList() {
                       <span className={`badge ${item.packing_date ? 'badge-completed' : 'badge-pending'}`}>
                         {item.packing_date ? 'Completed' : 'Not Packed'}
                       </span>
+                    </td>
+                    <td>
+                      <a
+                        href={`/trace/${item.batch_id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn btn-sm btn-secondary"
+                      >
+                        Open Trace
+                      </a>
                     </td>
                   </tr>
                 ))
