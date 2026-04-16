@@ -14,6 +14,7 @@ import Breaking from './pages/Breaking';
 import Fermentation from './pages/Fermentation';
 import Transfers from './pages/Transfers';
 import Drying from './pages/Drying';
+import DryingRoomList from './pages/DryingRoomList';
 import Moisture from './pages/Moisture';
 import Packing from './pages/Packing';
 import Trace from './pages/Trace';
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="fermentation" element={<Fermentation />} />
             <Route path="transfers" element={<Transfers />} />
             <Route path="drying" element={<Drying />} />
+            <Route path="drying-room-list" element={<DryingRoomList />} />
             <Route path="moisture" element={<Moisture />} />
             <Route path="packing" element={<Packing />} />
             <Route path="farmer-export" element={<FarmerExport />} />

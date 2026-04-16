@@ -11,6 +11,7 @@ const NAV = [
   { to: '/fermentation', icon: '\u{1F9EA}', label: 'Fermentation' },
   { to: '/transfers', icon: '\u{1F501}', label: 'Transfers' },
   { to: '/drying', icon: '\u2600\uFE0F', label: 'Drying' },
+  { to: '/drying-room-list', icon: '\u{1F4CB}', label: 'Drying Room List' },
   { to: '/moisture', icon: '\u{1F4A7}', label: 'Moisture' },
   { to: '/packing', icon: '\u{1F4EB}', label: 'Packing' },
 ];

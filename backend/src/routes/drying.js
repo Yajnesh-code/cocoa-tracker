@@ -8,10 +8,21 @@ const { syncBatchStage } = require('../utils/googleSheetSync');
 router.get('/', auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT d.*, b.batch_code, fr.name AS farmer_name, fr.location
+      `SELECT
+         d.*,
+         b.batch_code,
+         fr.farmer_code,
+         fr.name AS farmer_name,
+         fr.location,
+         p.packing_date,
+         CASE
+           WHEN p.id IS NOT NULL THEN 'Completed'
+           ELSE 'Not Packed'
+         END AS packing_status
        FROM drying d
        JOIN batches b ON d.batch_id = b.id
        JOIN farmers fr ON b.farmer_id = fr.id
+       LEFT JOIN packing p ON p.batch_id = d.batch_id
        ORDER BY d.start_date DESC, d.created_at DESC`
     );
     res.json(result.rows);
