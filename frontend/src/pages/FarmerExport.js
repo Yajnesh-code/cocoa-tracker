@@ -169,12 +169,13 @@ export default function FarmerExport() {
                 <th>Farmer</th>
                 <th>Date</th>
                 <th>Farmer / Company Total</th>
+                <th>Trace</th>
               </tr>
             </thead>
             <tbody>
               {batches.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
                     No batch records available
                   </td>
                 </tr>
@@ -195,6 +196,16 @@ export default function FarmerExport() {
                       <td>{batch.farmer_name}</td>
                       <td>{batch.pod_date?.slice(0, 10)}</td>
                       <td>{farmerTotalWeight.toFixed(2)} kg / {companyTotalWeight.toFixed(2)} kg</td>
+                      <td>
+                        <a
+                          href={`/trace/${batch.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-sm btn-secondary"
+                        >
+                          Open Trace
+                        </a>
+                      </td>
                     </tr>
                   );
                 })
