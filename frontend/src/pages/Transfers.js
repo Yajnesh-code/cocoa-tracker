@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
 
-const BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
+const BOXES = Array.from({ length: 6 }, (_, row) => String.fromCharCode(65 + row))
   .flatMap((letter) => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
 
 const MAX_ACTIVE_BATCHES_PER_BOX = 5;

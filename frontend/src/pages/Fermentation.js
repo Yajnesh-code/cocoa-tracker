@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import api from '../api/axios';
 
-const BOXES = Array.from({ length: 5 }, (_, row) => String.fromCharCode(65 + row))
+const BOXES = Array.from({ length: 6 }, (_, row) => String.fromCharCode(65 + row))
   .flatMap((letter) => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
 
 const MAX_ACTIVE_BATCHES_PER_BOX = 5;
@@ -293,7 +293,7 @@ export default function Fermentation() {
             </div>
 
             <div className="fermentation-chamber-summary">
-              <div className="fermentation-summary-pill">60 total boxes</div>
+              <div className="fermentation-summary-pill">72 total boxes</div>
               <div className="fermentation-summary-pill">Up to 5 active batch entries per box</div>
               <div className="fermentation-summary-pill">Shows farmer, bean type, and start date</div>
             </div>

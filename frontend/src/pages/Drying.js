@@ -6,7 +6,7 @@ export default function Drying() {
   const [fermentations, setFermentations] = useState([]);
   const [dryingRecords, setDryingRecords] = useState([]);
   const [form, setForm] = useState({ batch_id: '', shelf_id: '', start_date: '' });
-  const [completeForm, setCompleteForm] = useState({ batch_id: '', end_date: '', total_dry_weight: '' });
+  const [completeForm, setCompleteForm] = useState({ batch_id: '', end_date: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -56,12 +56,9 @@ export default function Drying() {
     setSuccess('');
     setLoading(true);
     try {
-      await api.patch(`/drying/${completeForm.batch_id}/complete`, {
-        end_date: completeForm.end_date,
-        total_dry_weight: completeForm.total_dry_weight,
-      });
+      await api.patch(`/drying/${completeForm.batch_id}/complete`, { end_date: completeForm.end_date });
       setSuccess('Drying completed!');
-      setCompleteForm({ batch_id: '', end_date: '', total_dry_weight: '' });
+      setCompleteForm({ batch_id: '', end_date: '' });
       await refresh();
     } catch (err) {
       setError(err.response?.data?.error || 'Failed');
@@ -140,19 +137,6 @@ export default function Drying() {
             <div className="form-group">
               <label>Drying End Date *</label>
               <input name="end_date" type="date" value={completeForm.end_date} onChange={handleC} required />
-            </div>
-            <div className="form-group">
-              <label>Total Dry Weight (kg) *</label>
-              <input
-                name="total_dry_weight"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="e.g. 42.5"
-                value={completeForm.total_dry_weight}
-                onChange={handleC}
-                required
-              />
             </div>
             <button className="btn btn-accent" type="submit" disabled={loading}>
               {loading ? 'Saving...' : 'Complete Drying'}
