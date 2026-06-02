@@ -6,7 +6,7 @@ const { syncBatchStage } = require('../utils/googleSheetSync');
 const { notifyFermentationStart } = require('../utils/notificationHelper');
 
 const MAX_ACTIVE_BATCHES_PER_BOX = 5;
-const VALID_BOXES = Array.from({ length: 6 }, (_, row) => String.fromCharCode(65 + row))
+const VALID_BOXES = Array.from({ length: 8 }, (_, row) => String.fromCharCode(65 + row))
   .flatMap((letter) => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
 
 function normalizeBox(value) {
@@ -111,7 +111,7 @@ router.post('/', auth, async (req, res) => {
 
   const allBoxes = uniqueBoxes([...goodBoxes, ...badBoxes]);
   if (allBoxes.some((box) => !VALID_BOXES.includes(box))) {
-    return res.status(400).json({ error: 'Fermentation boxes must be in range A1-F12' });
+    return res.status(400).json({ error: 'Fermentation boxes must be in range A1-H12' });
   }
 
   const goodWeight = good_weight !== undefined && good_weight !== null && good_weight !== ''
