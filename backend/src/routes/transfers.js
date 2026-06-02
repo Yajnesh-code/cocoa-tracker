@@ -6,7 +6,7 @@ const { syncBatchStage } = require('../utils/googleSheetSync');
 const { notifyTransfer } = require('../utils/notificationHelper');
 
 const MAX_ACTIVE_BATCHES_PER_BOX = 5;
-const VALID_BOXES = Array.from({ length: 8 }, (_, row) => String.fromCharCode(65 + row))
+const VALID_BOXES = Array.from({ length: 7 }, (_, row) => String.fromCharCode(65 + row))
   .flatMap((letter) => Array.from({ length: 12 }, (_, col) => `${letter}${col + 1}`));
 
 function normalizeBox(value) {
@@ -98,7 +98,7 @@ router.post('/', auth, async (req, res) => {
   const to = String(to_box).toUpperCase();
 
   if (!VALID_BOXES.includes(from) || !VALID_BOXES.includes(to)) {
-    return res.status(400).json({ error: 'Boxes must be A1-H12' });
+    return res.status(400).json({ error: 'Boxes must be A1-G12' });
   }
 
   if (from === to) {
