@@ -7,8 +7,10 @@ function normalizeError(err, fallback) {
 
 export default function CocoaProcessing() {
   const [batches, setBatches] = useState([]);
+  const [sourceBatches, setSourceBatches] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [roastLots, setRoastLots] = useState([]);
+  const [roastingBatchLots, setRoastingBatchLots] = useState([]);
   const [selectedBatchCodeForRoast, setSelectedBatchCodeForRoast] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -38,10 +40,12 @@ export default function CocoaProcessing() {
 
   const refresh = async () => {
     try {
-      const [batchesRes, inventoryRes] = await Promise.all([
+      const [sourceBatchesRes, batchesRes, inventoryRes] = await Promise.all([
+        api.get('/batches'),
         api.get('/cocoa-processing/batches'),
         api.get('/cocoa-processing/inventory'),
       ]);
+      setSourceBatches(sourceBatchesRes.data || []);
       setBatches(batchesRes.data);
       setInventory(inventoryRes.data);
     } catch (err) {
@@ -63,9 +67,37 @@ export default function CocoaProcessing() {
       .catch(() => setRoastLots([]));
   }, [selectedBatchCodeForRoast]);
 
+  useEffect(() => {
+    const batchCode = String(roasting.batch_code || '').toUpperCase();
+    if (!batchCode) {
+      setRoastingBatchLots([]);
+      setRoasting((current) => ({ ...current, roast_lot_number: '' }));
+      return;
+    }
+
+    api.get(`/cocoa-processing/roast-lots/${batchCode}`)
+      .then((res) => {
+        const lots = res.data || [];
+        setRoastingBatchLots(lots);
+        setRoasting((current) => ({
+          ...current,
+          roast_lot_number: `LOT-${String(lots.length + 1).padStart(3, '0')}`,
+        }));
+      })
+      .catch(() => {
+        setRoastingBatchLots([]);
+        setRoasting((current) => ({ ...current, roast_lot_number: 'LOT-001' }));
+      });
+  }, [roasting.batch_code]);
+
   const batchCodes = useMemo(
-    () => batches.map((item) => item.batch_code),
+    () => Array.from(new Set(batches.map((item) => item.batch_code).filter(Boolean))),
     [batches]
+  );
+
+  const sourceBatchCodes = useMemo(
+    () => Array.from(new Set(sourceBatches.map((item) => item.batch_code).filter(Boolean))),
+    [sourceBatches]
   );
 
   const saveBeansArrival = async (e) => {
@@ -74,12 +106,18 @@ export default function CocoaProcessing() {
     setSuccess('');
     setLoading(true);
     try {
-      await api.post('/cocoa-processing/beans-arrival', {
+      const response = await api.post('/cocoa-processing/beans-arrival', {
         ...beansArrival,
         batch_code: String(beansArrival.batch_code || '').toUpperCase(),
       });
       setSuccess('Beans Arrival + Moisture saved');
+      const savedBatchCode = String(response.data?.batch_code || beansArrival.batch_code || '').toUpperCase();
       setBeansArrival({ batch_code: '', weight_kg: '', moisture_pct: '' });
+      setRoasting((current) => ({ ...current, batch_code: savedBatchCode }));
+      setWinnowing((current) => ({ ...current, batch_code: savedBatchCode }));
+      setCleaning((current) => ({ ...current, batch_code: savedBatchCode }));
+      setNibsPacking((current) => ({ ...current, batch_code: savedBatchCode }));
+      setSelectedBatchCodeForRoast(savedBatchCode);
       await refresh();
     } catch (err) {
       setError(normalizeError(err, 'Failed to save beans arrival'));
@@ -106,6 +144,9 @@ export default function CocoaProcessing() {
         weight_after_roasting_kg: '',
         moisture_after_roasting_pct: '',
       });
+      setWinnowing((current) => ({ ...current, batch_code: String(roasting.batch_code || '').toUpperCase() }));
+      setCleaning((current) => ({ ...current, batch_code: String(roasting.batch_code || '').toUpperCase() }));
+      setNibsPacking((current) => ({ ...current, batch_code: String(roasting.batch_code || '').toUpperCase() }));
       setSelectedBatchCodeForRoast(String(roasting.batch_code || '').toUpperCase());
       await refresh();
     } catch (err) {
@@ -121,12 +162,15 @@ export default function CocoaProcessing() {
     setSuccess('');
     setLoading(true);
     try {
-      await api.post('/cocoa-processing/winnowing', {
+      const response = await api.post('/cocoa-processing/winnowing', {
         ...winnowing,
         batch_code: String(winnowing.batch_code || '').toUpperCase(),
       });
       setSuccess('Winnowing saved');
+      const savedBatchCode = String(response.data?.batch_code || winnowing.batch_code || '').toUpperCase();
       setWinnowing({ batch_code: '', weight_before_kg: '', weight_after_kg: '' });
+      setCleaning((current) => ({ ...current, batch_code: savedBatchCode }));
+      setNibsPacking((current) => ({ ...current, batch_code: savedBatchCode }));
       await refresh();
     } catch (err) {
       setError(normalizeError(err, 'Failed to save winnowing'));
@@ -161,6 +205,7 @@ export default function CocoaProcessing() {
         workers_input: '',
         remarks: '',
       });
+      setNibsPacking((current) => ({ ...current, batch_code: String(cleaning.batch_code || '').toUpperCase() }));
       await refresh();
     } catch (err) {
       setError(normalizeError(err, 'Failed to save cleaning nibs'));
@@ -204,7 +249,12 @@ export default function CocoaProcessing() {
             <h2>Step 1 - Beans Arrival + Moisture</h2>
             <div className="form-group">
               <label>Batch Code *</label>
-              <input value={beansArrival.batch_code} onChange={(e) => setBeansArrival({ ...beansArrival, batch_code: e.target.value })} required />
+              <select value={beansArrival.batch_code} onChange={(e) => setBeansArrival({ ...beansArrival, batch_code: e.target.value })} required>
+                <option value="">Select source batch...</option>
+                {sourceBatchCodes.map((code) => (
+                  <option key={code} value={code}>{code}</option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
               <label>Weight (kg) *</label>
@@ -221,11 +271,16 @@ export default function CocoaProcessing() {
             <h2>Step 2 - Roasting (Max 10kg per lot)</h2>
             <div className="form-group">
               <label>Batch Code *</label>
-              <input value={roasting.batch_code} onChange={(e) => setRoasting({ ...roasting, batch_code: e.target.value })} required />
+              <select value={roasting.batch_code} onChange={(e) => setRoasting({ ...roasting, batch_code: e.target.value })} required>
+                <option value="">Select processing batch...</option>
+                {batchCodes.map((code) => (
+                  <option key={code} value={code}>{code}</option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
               <label>Roast Lot Number *</label>
-              <input value={roasting.roast_lot_number} onChange={(e) => setRoasting({ ...roasting, roast_lot_number: e.target.value })} required />
+              <input value={roasting.roast_lot_number} readOnly required />
             </div>
             <div className="form-group">
               <label>Quantity Roasted (kg) *</label>
@@ -240,6 +295,9 @@ export default function CocoaProcessing() {
               <input type="number" step="0.01" value={roasting.moisture_after_roasting_pct} onChange={(e) => setRoasting({ ...roasting, moisture_after_roasting_pct: e.target.value })} required />
             </div>
             <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : 'Add Roast Lot'}</button>
+            <div className="compact-help" style={{ marginTop: 8 }}>
+              Roast lot number is generated automatically. Existing lots for this batch: {roastingBatchLots.length}
+            </div>
           </form>
         </div>
       </div>
@@ -250,7 +308,12 @@ export default function CocoaProcessing() {
             <h2>Step 3 - Winnowing</h2>
             <div className="form-group">
               <label>Batch Code *</label>
-              <input value={winnowing.batch_code} onChange={(e) => setWinnowing({ ...winnowing, batch_code: e.target.value })} required />
+              <select value={winnowing.batch_code} onChange={(e) => setWinnowing({ ...winnowing, batch_code: e.target.value })} required>
+                <option value="">Select processing batch...</option>
+                {batchCodes.map((code) => (
+                  <option key={code} value={code}>{code}</option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
               <label>Weight Before Winnowing *</label>
@@ -267,7 +330,12 @@ export default function CocoaProcessing() {
             <h2>Step 4 - Cleaning Nibs</h2>
             <div className="form-group">
               <label>Batch Code *</label>
-              <input value={cleaning.batch_code} onChange={(e) => setCleaning({ ...cleaning, batch_code: e.target.value })} required />
+              <select value={cleaning.batch_code} onChange={(e) => setCleaning({ ...cleaning, batch_code: e.target.value })} required>
+                <option value="">Select processing batch...</option>
+                {batchCodes.map((code) => (
+                  <option key={code} value={code}>{code}</option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
               <label>Weight Before Cleaning *</label>
@@ -296,7 +364,12 @@ export default function CocoaProcessing() {
             <h2>Step 5 - Nibs Packing</h2>
             <div className="form-group">
               <label>Batch Code *</label>
-              <input value={nibsPacking.batch_code} onChange={(e) => setNibsPacking({ ...nibsPacking, batch_code: e.target.value })} required />
+              <select value={nibsPacking.batch_code} onChange={(e) => setNibsPacking({ ...nibsPacking, batch_code: e.target.value })} required>
+                <option value="">Select processing batch...</option>
+                {batchCodes.map((code) => (
+                  <option key={code} value={code}>{code}</option>
+                ))}
+              </select>
             </div>
             <div className="form-group">
               <label>Total Nibs Weight (kg) *</label>

@@ -50,22 +50,32 @@ export default function ChocolateProduction() {
     refresh();
   }, []);
 
-  const productionBatchNumbers = batches.map((item) => item.production_batch_number);
+  const selectedInventory = inventory.find((item) => item.batch_code === step1.source_batch_code);
+  const availableNibsStockKg = Number(selectedInventory?.available_nibs_stock_kg || 0);
+  const nibsQuantityUsedKg = Number(step1.nibs_quantity_used_kg || 0);
+  const remainingNibsStockKg = Math.max(availableNibsStockKg - nibsQuantityUsedKg, 0);
+  const activeProductionBatchNumbers = batches
+    .filter((item) => item.status !== 'Completed')
+    .map((item) => item.production_batch_number);
+  const couvertureTotalWeightG = Math.round(Number(step2.number_of_couverture_packs || 0) * 500);
+  const packedBarsPreview = Math.floor((Number(step8.total_chocolate_weight_kg || 0) * 1000) / 50);
 
   const submit = async (endpoint, payload, successMessage, reset) => {
     setError('');
     setSuccess('');
     setLoading(true);
     try {
-      await api.post(`/chocolate-production/${endpoint}`, payload);
+      const response = await api.post(`/chocolate-production/${endpoint}`, payload);
       setSuccess(successMessage);
       if (reset) reset();
       await refresh();
+      return response.data;
     } catch (err) {
       setError(normalizeError(err, 'Failed to save'));
     } finally {
       setLoading(false);
     }
+    return null;
   };
 
   return (
@@ -80,9 +90,9 @@ export default function ChocolateProduction() {
         {success ? <div className="alert alert-success">{success}</div> : null}
 
         <div className="grid-2">
-          <form onSubmit={(e) => {
+          <form onSubmit={async (e) => {
             e.preventDefault();
-            submit(
+            const result = await submit(
               'grinding-conching',
               {
                 ...step1,
@@ -100,18 +110,35 @@ export default function ChocolateProduction() {
                 remarks: '',
               })
             );
+            if (result?.production_batch_number) {
+              const nextBatchNumber = result.production_batch_number;
+              setStep2((current) => ({ ...current, production_batch_number: nextBatchNumber }));
+              setStep3((current) => ({ ...current, production_batch_number: nextBatchNumber }));
+              setStep4((current) => ({ ...current, production_batch_number: nextBatchNumber }));
+              setStep5((current) => ({ ...current, production_batch_number: nextBatchNumber }));
+              setStep6((current) => ({ ...current, production_batch_number: nextBatchNumber }));
+              setStep7((current) => ({ ...current, production_batch_number: nextBatchNumber }));
+              setStep8((current) => ({ ...current, production_batch_number: nextBatchNumber }));
+              setStep9((current) => ({ ...current, production_batch_number: nextBatchNumber }));
+            }
           }}>
             <h2>Step 1 - Grinding + Conching</h2>
             <div className="form-group">
               <label>Source Batch Code *</label>
               <select value={step1.source_batch_code} onChange={(e) => setStep1({ ...step1, source_batch_code: e.target.value })} required>
                 <option value="">Select source batch...</option>
-                {inventory.map((item) => (
+                {inventory
+                  .filter((item) => Number(item.available_nibs_stock_kg || 0) > 0)
+                  .map((item) => (
                   <option key={item.id} value={item.batch_code}>
                     {item.batch_code} - {Number(item.available_nibs_stock_kg || 0).toFixed(2)} kg ({item.status})
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="form-group">
+              <label>Available Nibs Stock</label>
+              <input value={step1.source_batch_code ? `${availableNibsStockKg.toFixed(2)} kg` : ''} readOnly placeholder="Auto-filled from inventory" />
             </div>
             <div className="form-group">
               <label>Recipe Name *</label>
@@ -124,7 +151,11 @@ export default function ChocolateProduction() {
             </div>
             <div className="form-group">
               <label>Nibs Quantity Used (kg) *</label>
-              <input type="number" step="0.01" value={step1.nibs_quantity_used_kg} onChange={(e) => setStep1({ ...step1, nibs_quantity_used_kg: e.target.value })} required />
+              <input type="number" step="0.01" max={availableNibsStockKg || undefined} value={step1.nibs_quantity_used_kg} onChange={(e) => setStep1({ ...step1, nibs_quantity_used_kg: e.target.value })} required />
+            </div>
+            <div className="form-group">
+              <label>Remaining Nibs Stock</label>
+              <input value={step1.source_batch_code ? `${remainingNibsStockKg.toFixed(2)} kg` : ''} readOnly placeholder="Auto-calculated after usage" />
             </div>
             <div className="form-group">
               <label>Start Time *</label>
@@ -193,7 +224,7 @@ export default function ChocolateProduction() {
               <label>Production Batch Number *</label>
               <select value={step2.production_batch_number} onChange={(e) => setStep2({ ...step2, production_batch_number: e.target.value })} required>
                 <option value="">Select production batch...</option>
-                {productionBatchNumbers.map((batchNo) => (
+                {activeProductionBatchNumbers.map((batchNo) => (
                   <option key={batchNo} value={batchNo}>{batchNo}</option>
                 ))}
               </select>
@@ -201,6 +232,10 @@ export default function ChocolateProduction() {
             <div className="form-group">
               <label>Number Of Couverture Packs *</label>
               <input type="number" value={step2.number_of_couverture_packs} onChange={(e) => setStep2({ ...step2, number_of_couverture_packs: e.target.value })} required />
+            </div>
+            <div className="form-group">
+              <label>Total Weight</label>
+              <input value={step2.number_of_couverture_packs ? `${couvertureTotalWeightG} g` : ''} readOnly placeholder="Auto-calculated at 500 g per pack" />
             </div>
             <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save'}</button>
           </form>
@@ -219,7 +254,7 @@ export default function ChocolateProduction() {
               <label>Production Batch Number *</label>
               <select value={step3.production_batch_number} onChange={(e) => setStep3({ ...step3, production_batch_number: e.target.value })} required>
                 <option value="">Select production batch...</option>
-                {productionBatchNumbers.map((batchNo) => (
+                {activeProductionBatchNumbers.map((batchNo) => (
                   <option key={batchNo} value={batchNo}>{batchNo}</option>
                 ))}
               </select>
@@ -253,7 +288,7 @@ export default function ChocolateProduction() {
               <label>Production Batch Number *</label>
               <select value={step4.production_batch_number} onChange={(e) => setStep4({ ...step4, production_batch_number: e.target.value })} required>
                 <option value="">Select production batch...</option>
-                {productionBatchNumbers.map((batchNo) => (
+                {activeProductionBatchNumbers.map((batchNo) => (
                   <option key={batchNo} value={batchNo}>{batchNo}</option>
                 ))}
               </select>
@@ -283,7 +318,7 @@ export default function ChocolateProduction() {
               <label>Production Batch Number *</label>
               <select value={step5.production_batch_number} onChange={(e) => setStep5({ ...step5, production_batch_number: e.target.value })} required>
                 <option value="">Select production batch...</option>
-                {productionBatchNumbers.map((batchNo) => (
+                {activeProductionBatchNumbers.map((batchNo) => (
                   <option key={batchNo} value={batchNo}>{batchNo}</option>
                 ))}
               </select>
@@ -317,7 +352,7 @@ export default function ChocolateProduction() {
               <label>Production Batch Number *</label>
               <select value={step6.production_batch_number} onChange={(e) => setStep6({ ...step6, production_batch_number: e.target.value })} required>
                 <option value="">Select production batch...</option>
-                {productionBatchNumbers.map((batchNo) => (
+                {activeProductionBatchNumbers.map((batchNo) => (
                   <option key={batchNo} value={batchNo}>{batchNo}</option>
                 ))}
               </select>
@@ -351,7 +386,7 @@ export default function ChocolateProduction() {
               <label>Production Batch Number *</label>
               <select value={step7.production_batch_number} onChange={(e) => setStep7({ ...step7, production_batch_number: e.target.value })} required>
                 <option value="">Select production batch...</option>
-                {productionBatchNumbers.map((batchNo) => (
+                {activeProductionBatchNumbers.map((batchNo) => (
                   <option key={batchNo} value={batchNo}>{batchNo}</option>
                 ))}
               </select>
@@ -385,7 +420,7 @@ export default function ChocolateProduction() {
               <label>Production Batch Number *</label>
               <select value={step8.production_batch_number} onChange={(e) => setStep8({ ...step8, production_batch_number: e.target.value })} required>
                 <option value="">Select production batch...</option>
-                {productionBatchNumbers.map((batchNo) => (
+                {activeProductionBatchNumbers.map((batchNo) => (
                   <option key={batchNo} value={batchNo}>{batchNo}</option>
                 ))}
               </select>
@@ -393,6 +428,10 @@ export default function ChocolateProduction() {
             <div className="form-group">
               <label>Total Chocolate Weight (kg) *</label>
               <input type="number" step="0.01" value={step8.total_chocolate_weight_kg} onChange={(e) => setStep8({ ...step8, total_chocolate_weight_kg: e.target.value })} required />
+            </div>
+            <div className="form-group">
+              <label>Packed Bars</label>
+              <input value={step8.total_chocolate_weight_kg ? String(packedBarsPreview) : ''} readOnly placeholder="Auto-calculated at 50 g per bar" />
             </div>
             <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save'}</button>
           </form>
@@ -411,7 +450,7 @@ export default function ChocolateProduction() {
               <label>Production Batch Number *</label>
               <select value={step9.production_batch_number} onChange={(e) => setStep9({ ...step9, production_batch_number: e.target.value })} required>
                 <option value="">Select production batch...</option>
-                {productionBatchNumbers.map((batchNo) => (
+                {activeProductionBatchNumbers.map((batchNo) => (
                   <option key={batchNo} value={batchNo}>{batchNo}</option>
                 ))}
               </select>
