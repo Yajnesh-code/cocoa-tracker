@@ -19,6 +19,11 @@ import Moisture from './pages/Moisture';
 import Packing from './pages/Packing';
 import Trace from './pages/Trace';
 import FarmerExport from './pages/FarmerExport';
+import CocoaProcessing from './pages/CocoaProcessing';
+import ChocolateProduction from './pages/ChocolateProduction';
+import RecipeMaster from './pages/RecipeMaster';
+import ProcessingBatchTracking from './pages/ProcessingBatchTracking';
+import ProcessingReports from './pages/ProcessingReports';
 
 function PrivateRoute({ children }) {
   const { user } = useAuth();
@@ -47,6 +52,11 @@ export default function App() {
             <Route path="moisture" element={<Moisture />} />
             <Route path="packing" element={<Packing />} />
             <Route path="farmer-export" element={<FarmerExport />} />
+            <Route path="cocoa-processing" element={<CocoaProcessing />} />
+            <Route path="chocolate-production" element={<ChocolateProduction />} />
+            <Route path="recipe-master" element={<RecipeMaster />} />
+            <Route path="processing-tracking" element={<ProcessingBatchTracking />} />
+            <Route path="processing-reports" element={<ProcessingReports />} />
           </Route>
         </Routes>
       </BrowserRouter>

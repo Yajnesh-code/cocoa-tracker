@@ -14,6 +14,11 @@ const NAV = [
   { to: '/drying-room-list', icon: '\u{1F4CB}', label: 'Drying Room List' },
   { to: '/moisture', icon: '\u{1F4A7}', label: 'Moisture' },
   { to: '/packing', icon: '\u{1F4EB}', label: 'Packing' },
+  { to: '/cocoa-processing', icon: '\u{1FAD8}', label: 'Cocoa Processing' },
+  { to: '/chocolate-production', icon: '\u{1F36B}', label: 'Chocolate Production' },
+  { to: '/processing-tracking', icon: '\u{1F50D}', label: 'Batch Tracking' },
+  { to: '/processing-reports', icon: '\u{1F4CA}', label: 'Processing Reports' },
+  { to: '/recipe-master', icon: '\u{1F4D6}', label: 'Recipe Master' },
 ];
 
 export default function Layout() {

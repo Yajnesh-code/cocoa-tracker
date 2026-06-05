@@ -46,6 +46,12 @@ app.use('/api/moisture', require('./routes/moisture'));
 app.use('/api/packing', require('./routes/packing'));
 app.use('/api/trace', require('./routes/trace'));
 app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/cocoa-processing', require('./routes/cocoaProcessing'));
+app.use('/api/chocolate-production', require('./routes/chocolateProduction'));
+app.use('/api/processing-dashboard', require('./routes/processingDashboard'));
+app.use('/api/processing-trace', require('./routes/processingTrace'));
+app.use('/api/processing-reports', require('./routes/processingReports'));
+app.use('/api/permissions', require('./routes/permissions'));
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

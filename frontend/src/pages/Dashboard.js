@@ -26,15 +26,17 @@ export default function Dashboard() {
   const [farmers, setFarmers] = useState([]);
   const [fermentations, setFermentations] = useState([]);
   const [transferMap, setTransferMap] = useState({});
+  const [processingStats, setProcessingStats] = useState(null);
   const [traceQuery, setTraceQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.get('/batches'), api.get('/farmers'), api.get('/fermentation')])
-      .then(async ([b, f, fermentationRes]) => {
+    Promise.all([api.get('/batches'), api.get('/farmers'), api.get('/fermentation'), api.get('/processing-dashboard').catch(() => null)])
+      .then(async ([b, f, fermentationRes, processingStatsRes]) => {
         setBatches(b.data);
         setFarmers(f.data);
         setFermentations(fermentationRes.data);
+        setProcessingStats(processingStatsRes?.data || null);
 
         const activeFermentations = fermentationRes.data.filter((item) => item.status === 'active');
         const transferResponses = await Promise.all(
@@ -340,11 +342,45 @@ export default function Dashboard() {
                 { to: '/fermentation', label: '+ Fermentation', cls: 'btn-secondary' },
                 { to: '/drying', label: '+ Drying', cls: 'btn-secondary' },
                 { to: '/packing', label: '+ Packing', cls: 'btn-secondary' },
+                { to: '/cocoa-processing', label: '+ Cocoa Processing', cls: 'btn-secondary' },
+                { to: '/chocolate-production', label: '+ Chocolate Production', cls: 'btn-secondary' },
               ].map((action) => (
                 <Link key={action.to} to={action.to} className={`btn ${action.cls}`}>{action.label}</Link>
               ))}
             </div>
           </div>
+
+          {processingStats ? (
+            <div className="card">
+              <h2>Processing Dashboards</h2>
+              <div className="stat-chip-grid">
+                <div className="stat-chip">
+                  <div className="stat-chip-label">Beans Received</div>
+                  <div className="stat-chip-value">{Number(processingStats.cocoa_processing.total_beans_received_kg || 0).toFixed(2)} kg</div>
+                </div>
+                <div className="stat-chip">
+                  <div className="stat-chip-label">Nibs Inventory</div>
+                  <div className="stat-chip-value">{Number(processingStats.cocoa_processing.total_nibs_inventory_kg || 0).toFixed(2)} kg</div>
+                </div>
+                <div className="stat-chip">
+                  <div className="stat-chip-label">Chocolate Produced</div>
+                  <div className="stat-chip-value">{Number(processingStats.chocolate_production.total_chocolate_produced_kg || 0).toFixed(2)} kg</div>
+                </div>
+                <div className="stat-chip">
+                  <div className="stat-chip-label">Total Bars</div>
+                  <div className="stat-chip-value">{Number(processingStats.chocolate_production.total_bars_produced || 0)}</div>
+                </div>
+                <div className="stat-chip">
+                  <div className="stat-chip-label">Active Production Batches</div>
+                  <div className="stat-chip-value">{Number(processingStats.chocolate_production.active_production_batches || 0)}</div>
+                </div>
+                <div className="stat-chip">
+                  <div className="stat-chip-label">Completed Batches</div>
+                  <div className="stat-chip-value">{Number(processingStats.chocolate_production.completed_production_batches || 0)}</div>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </>
       )}
     </div>
