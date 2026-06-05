@@ -8,6 +8,7 @@ function normalizeError(err, fallback) {
 export default function CocoaProcessing() {
   const [batches, setBatches] = useState([]);
   const [sourceBatches, setSourceBatches] = useState([]);
+  const [workers, setWorkers] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [roastLots, setRoastLots] = useState([]);
   const [roastingBatchLots, setRoastingBatchLots] = useState([]);
@@ -29,7 +30,8 @@ export default function CocoaProcessing() {
     batch_code: '',
     weight_before_kg: '',
     weight_after_kg: '',
-    workers_input: '',
+    selected_worker: '',
+    workers_involved: [],
     remarks: '',
   });
   const [nibsPacking, setNibsPacking] = useState({
@@ -40,13 +42,15 @@ export default function CocoaProcessing() {
 
   const refresh = async () => {
     try {
-      const [sourceBatchesRes, batchesRes, inventoryRes] = await Promise.all([
+      const [sourceBatchesRes, batchesRes, workersRes, inventoryRes] = await Promise.all([
         api.get('/batches'),
         api.get('/cocoa-processing/batches'),
+        api.get('/cocoa-processing/workers'),
         api.get('/cocoa-processing/inventory'),
       ]);
       setSourceBatches(sourceBatchesRes.data || []);
       setBatches(batchesRes.data);
+      setWorkers(workersRes.data || []);
       setInventory(inventoryRes.data);
     } catch (err) {
       setError(normalizeError(err, 'Failed to load cocoa processing data'));
@@ -99,6 +103,26 @@ export default function CocoaProcessing() {
     () => Array.from(new Set(sourceBatches.map((item) => item.batch_code).filter(Boolean))),
     [sourceBatches]
   );
+
+  const addCleaningWorker = () => {
+    const selectedWorker = String(cleaning.selected_worker || '').trim();
+    if (!selectedWorker || cleaning.workers_involved.includes(selectedWorker)) {
+      setCleaning((current) => ({ ...current, selected_worker: '' }));
+      return;
+    }
+    setCleaning((current) => ({
+      ...current,
+      selected_worker: '',
+      workers_involved: [...current.workers_involved, selectedWorker],
+    }));
+  };
+
+  const removeCleaningWorker = (workerName) => {
+    setCleaning((current) => ({
+      ...current,
+      workers_involved: current.workers_involved.filter((item) => item !== workerName),
+    }));
+  };
 
   const saveBeansArrival = async (e) => {
     e.preventDefault();
@@ -185,16 +209,13 @@ export default function CocoaProcessing() {
     setSuccess('');
     setLoading(true);
     try {
-      const workers = String(cleaning.workers_input || '')
-        .split(',')
-        .map((entry) => entry.trim())
-        .filter(Boolean);
+      const assignedWorkers = cleaning.workers_involved;
 
       await api.post('/cocoa-processing/cleaning-nibs', {
         batch_code: String(cleaning.batch_code || '').toUpperCase(),
         weight_before_kg: cleaning.weight_before_kg,
         weight_after_kg: cleaning.weight_after_kg,
-        workers_involved: workers,
+        workers_involved: assignedWorkers,
         remarks: cleaning.remarks,
       });
       setSuccess('Cleaning Nibs saved');
@@ -202,7 +223,8 @@ export default function CocoaProcessing() {
         batch_code: '',
         weight_before_kg: '',
         weight_after_kg: '',
-        workers_input: '',
+        selected_worker: '',
+        workers_involved: [],
         remarks: '',
       });
       setNibsPacking((current) => ({ ...current, batch_code: String(cleaning.batch_code || '').toUpperCase() }));
@@ -346,8 +368,38 @@ export default function CocoaProcessing() {
               <input type="number" step="0.01" value={cleaning.weight_after_kg} onChange={(e) => setCleaning({ ...cleaning, weight_after_kg: e.target.value })} required />
             </div>
             <div className="form-group">
-              <label>Workers Involved (comma separated)</label>
-              <input value={cleaning.workers_input} onChange={(e) => setCleaning({ ...cleaning, workers_input: e.target.value })} placeholder="Worker 1, Worker 2" />
+              <label>Workers Involved</label>
+              <div className="fermentation-picker-row">
+                <select value={cleaning.selected_worker} onChange={(e) => setCleaning({ ...cleaning, selected_worker: e.target.value })}>
+                  <option value="">Select worker...</option>
+                  {workers.map((worker) => (
+                    <option key={worker.id} value={worker.username}>
+                      {worker.username} ({worker.role})
+                    </option>
+                  ))}
+                </select>
+                <button className="btn btn-secondary fermentation-picker-button" type="button" onClick={addCleaningWorker}>
+                  Add Worker
+                </button>
+              </div>
+              {cleaning.workers_involved.length === 0 ? (
+                <div className="fermentation-empty-selection">No workers selected yet</div>
+              ) : (
+                <div className="fermentation-selected-boxes">
+                  {cleaning.workers_involved.map((workerName) => (
+                    <span key={workerName} className="fermentation-selected-chip fermentation-selected-chip-good">
+                      {workerName}
+                      <button
+                        type="button"
+                        onClick={() => removeCleaningWorker(workerName)}
+                        className="fermentation-selected-chip-remove"
+                      >
+                        x
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="form-group">
               <label>Remarks</label>

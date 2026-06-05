@@ -101,6 +101,19 @@ router.get('/inventory', auth, async (req, res) => {
   }
 });
 
+router.get('/workers', auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, username, email, role
+       FROM users
+       ORDER BY username ASC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/beans-arrival', auth, async (req, res) => {
   const batchCode = String(req.body.batch_code || '').trim().toUpperCase();
   const weightKg = toNumber(req.body.weight_kg);
