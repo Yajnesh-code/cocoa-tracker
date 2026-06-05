@@ -16,6 +16,7 @@ export default function CocoaProcessing() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [newWorkerName, setNewWorkerName] = useState('');
 
   const [beansArrival, setBeansArrival] = useState({ batch_code: '', weight_kg: '', moisture_pct: '' });
   const [roasting, setRoasting] = useState({
@@ -122,6 +123,25 @@ export default function CocoaProcessing() {
       ...current,
       workers_involved: current.workers_involved.filter((item) => item !== workerName),
     }));
+  };
+
+  const saveWorker = async () => {
+    const workerName = String(newWorkerName || '').trim();
+    if (!workerName) return;
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+    try {
+      await api.post('/cocoa-processing/workers', { worker_name: workerName });
+      setSuccess('Worker name added to the list');
+      setNewWorkerName('');
+      await refresh();
+    } catch (err) {
+      setError(normalizeError(err, 'Failed to save worker name'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const saveBeansArrival = async (e) => {
@@ -351,6 +371,20 @@ export default function CocoaProcessing() {
           <form onSubmit={saveCleaning}>
             <h2>Step 4 - Cleaning Nibs</h2>
             <div className="form-group">
+              <label>Add Worker Name</label>
+              <div className="fermentation-picker-row">
+                <input
+                  value={newWorkerName}
+                  onChange={(e) => setNewWorkerName(e.target.value)}
+                  placeholder="Enter worker name"
+                />
+                <button className="btn btn-secondary fermentation-picker-button" type="button" onClick={saveWorker} disabled={loading}>
+                  Save Name
+                </button>
+              </div>
+              <div className="compact-help">Add a worker name once, then select it below whenever needed.</div>
+            </div>
+            <div className="form-group">
               <label>Batch Code *</label>
               <select value={cleaning.batch_code} onChange={(e) => setCleaning({ ...cleaning, batch_code: e.target.value })} required>
                 <option value="">Select processing batch...</option>
@@ -373,8 +407,8 @@ export default function CocoaProcessing() {
                 <select value={cleaning.selected_worker} onChange={(e) => setCleaning({ ...cleaning, selected_worker: e.target.value })}>
                   <option value="">Select worker...</option>
                   {workers.map((worker) => (
-                    <option key={worker.id} value={worker.username}>
-                      {worker.username} ({worker.role})
+                    <option key={worker.id} value={worker.worker_name}>
+                      {worker.worker_name}
                     </option>
                   ))}
                 </select>

@@ -104,11 +104,32 @@ router.get('/inventory', auth, async (req, res) => {
 router.get('/workers', auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT id, username, email, role
-       FROM users
-       ORDER BY username ASC`
+      `SELECT id, worker_name
+       FROM processing_workers
+       ORDER BY worker_name ASC`
     );
     res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/workers', auth, async (req, res) => {
+  const workerName = String(req.body.worker_name || '').trim();
+  if (!workerName) {
+    return res.status(400).json({ error: 'worker_name is required' });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO processing_workers (worker_name, updated_at)
+       VALUES ($1, NOW())
+       ON CONFLICT (worker_name)
+       DO UPDATE SET updated_at = NOW()
+       RETURNING *`,
+      [workerName]
+    );
+    res.status(201).json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

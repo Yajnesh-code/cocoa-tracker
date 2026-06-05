@@ -224,6 +224,14 @@ async function initDB() {
       ALTER TABLE cocoa_cleaning_nibs ADD COLUMN IF NOT EXISTS workers_involved JSONB NOT NULL DEFAULT '[]'::jsonb;
       ALTER TABLE cocoa_cleaning_nibs ADD COLUMN IF NOT EXISTS remarks TEXT;
 
+      -- PROCESSING WORKERS
+      CREATE TABLE IF NOT EXISTS processing_workers (
+        id SERIAL PRIMARY KEY,
+        worker_name VARCHAR(150) UNIQUE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
       -- NIBS PACKING
       CREATE TABLE IF NOT EXISTS cocoa_nibs_packing (
         id SERIAL PRIMARY KEY,
