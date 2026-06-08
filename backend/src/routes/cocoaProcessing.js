@@ -10,6 +10,58 @@ function toNumber(value, fallback = null) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function normalizeBagDetails(entries) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry, index) => {
+      const weightKg = toNumber(entry.weight_kg);
+      const moisturePct = toNumber(entry.moisture_pct);
+      if (weightKg === null || moisturePct === null) return null;
+      return {
+        bag_label: String(entry.bag_label || `Bag ${index + 1}`).trim() || `Bag ${index + 1}`,
+        weight_kg: weightKg,
+        moisture_pct: moisturePct,
+      };
+    })
+    .filter(Boolean);
+}
+
+function summarizeBagDetails(entries) {
+  const totalWeightKg = entries.reduce((sum, entry) => sum + Number(entry.weight_kg || 0), 0);
+  const weightedMoistureTotal = entries.reduce(
+    (sum, entry) => sum + (Number(entry.weight_kg || 0) * Number(entry.moisture_pct || 0)),
+    0
+  );
+
+  return {
+    totalWeightKg: Number(totalWeightKg.toFixed(2)),
+    averageMoisturePct: totalWeightKg > 0
+      ? Number((weightedMoistureTotal / totalWeightKg).toFixed(2))
+      : 0,
+  };
+}
+
+function normalizeCleaningWorkers(entries) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        const workerName = entry.trim();
+        return workerName ? { worker_name: workerName, cleaned_nibs_kg: null } : null;
+      }
+
+      const workerName = String(entry.worker_name || '').trim();
+      const cleanedNibsKg = toNumber(entry.cleaned_nibs_kg);
+      if (!workerName) return null;
+
+      return {
+        worker_name: workerName,
+        cleaned_nibs_kg: cleanedNibsKg,
+      };
+    })
+    .filter(Boolean);
+}
+
 async function getSourceBatchIdByCode(batchCode) {
   const sourceBatchResult = await pool.query(
     'SELECT id FROM batches WHERE batch_code = $1 LIMIT 1',
@@ -48,7 +100,12 @@ router.get('/batches', auth, async (req, res) => {
            SELECT COUNT(*)::int
            FROM cocoa_roast_lots crl
            WHERE crl.cocoa_batch_id = cpb.id
-         ) AS roast_lot_count
+         ) AS roast_lot_count,
+         (
+           SELECT COALESCE(SUM(crl.quantity_roasted_kg), 0)
+           FROM cocoa_roast_lots crl
+           WHERE crl.cocoa_batch_id = cpb.id
+         ) AS total_roasted_kg
        FROM cocoa_processing_batches cpb
        LEFT JOIN cocoa_winnowing cw ON cw.cocoa_batch_id = cpb.id
        LEFT JOIN cocoa_cleaning_nibs ccn ON ccn.cocoa_batch_id = cpb.id
@@ -137,26 +194,34 @@ router.post('/workers', auth, async (req, res) => {
 
 router.post('/beans-arrival', auth, async (req, res) => {
   const batchCode = String(req.body.batch_code || '').trim().toUpperCase();
-  const weightKg = toNumber(req.body.weight_kg);
-  const moisturePct = toNumber(req.body.moisture_pct);
+  const bagDetails = normalizeBagDetails(req.body.bag_details);
+  const fallbackWeightKg = toNumber(req.body.weight_kg);
+  const fallbackMoisturePct = toNumber(req.body.moisture_pct);
+  const normalizedBagDetails = bagDetails.length
+    ? bagDetails
+    : (fallbackWeightKg !== null && fallbackMoisturePct !== null
+      ? [{ bag_label: 'Bag 1', weight_kg: fallbackWeightKg, moisture_pct: fallbackMoisturePct }]
+      : []);
+  const { totalWeightKg, averageMoisturePct } = summarizeBagDetails(normalizedBagDetails);
 
-  if (!batchCode || weightKg === null || moisturePct === null) {
-    return res.status(400).json({ error: 'batch_code, weight_kg, and moisture_pct are required' });
+  if (!batchCode || normalizedBagDetails.length === 0) {
+    return res.status(400).json({ error: 'batch_code and at least one bag entry are required' });
   }
 
   try {
     const sourceBatchId = await getSourceBatchIdByCode(batchCode);
     const result = await pool.query(
-      `INSERT INTO cocoa_processing_batches (batch_code, source_batch_id, weight_kg, moisture_pct, updated_at)
-       VALUES ($1, $2, $3, $4, NOW())
+      `INSERT INTO cocoa_processing_batches (batch_code, source_batch_id, weight_kg, moisture_pct, bag_details, updated_at)
+       VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
        ON CONFLICT (batch_code)
        DO UPDATE SET
          source_batch_id = EXCLUDED.source_batch_id,
          weight_kg = EXCLUDED.weight_kg,
          moisture_pct = EXCLUDED.moisture_pct,
+         bag_details = EXCLUDED.bag_details,
          updated_at = NOW()
        RETURNING *`,
-      [batchCode, sourceBatchId, weightKg, moisturePct]
+      [batchCode, sourceBatchId, totalWeightKg, averageMoisturePct, JSON.stringify(normalizedBagDetails)]
     );
 
     res.status(201).json(result.rows[0]);
@@ -279,8 +344,15 @@ router.post('/winnowing', auth, async (req, res) => {
 router.post('/cleaning-nibs', auth, async (req, res) => {
   const batchCode = String(req.body.batch_code || '').trim().toUpperCase();
   const weightBeforeKg = toNumber(req.body.weight_before_kg);
-  const weightAfterKg = toNumber(req.body.weight_after_kg);
-  const workersInvolved = Array.isArray(req.body.workers_involved) ? req.body.workers_involved : [];
+  const workersInvolved = normalizeCleaningWorkers(req.body.workers_involved);
+  const workerCleanedTotalKg = workersInvolved.reduce(
+    (sum, worker) => sum + Number(worker.cleaned_nibs_kg || 0),
+    0
+  );
+  const requestedWeightAfterKg = toNumber(req.body.weight_after_kg);
+  const weightAfterKg = workerCleanedTotalKg > 0
+    ? Number(workerCleanedTotalKg.toFixed(2))
+    : requestedWeightAfterKg;
   const remarks = req.body.remarks ? String(req.body.remarks).trim() : null;
 
   if (!batchCode || weightBeforeKg === null || weightAfterKg === null) {

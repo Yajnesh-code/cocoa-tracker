@@ -181,10 +181,21 @@ async function initDB() {
         source_batch_id INTEGER REFERENCES batches(id) ON DELETE SET NULL,
         weight_kg NUMERIC(10,2) NOT NULL,
         moisture_pct NUMERIC(5,2) NOT NULL,
+        bag_details JSONB NOT NULL DEFAULT '[]'::jsonb,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
       ALTER TABLE cocoa_processing_batches ADD COLUMN IF NOT EXISTS source_batch_id INTEGER REFERENCES batches(id) ON DELETE SET NULL;
+      ALTER TABLE cocoa_processing_batches ADD COLUMN IF NOT EXISTS bag_details JSONB NOT NULL DEFAULT '[]'::jsonb;
+      UPDATE cocoa_processing_batches
+      SET bag_details = jsonb_build_array(
+        jsonb_build_object(
+          'bag_label', 'Bag 1',
+          'weight_kg', weight_kg,
+          'moisture_pct', moisture_pct
+        )
+      )
+      WHERE bag_details IS NULL OR jsonb_array_length(bag_details) = 0;
 
       -- ROAST LOTS
       CREATE TABLE IF NOT EXISTS cocoa_roast_lots (

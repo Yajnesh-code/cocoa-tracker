@@ -11,6 +11,16 @@ function normalizeError(err, fallback) {
   return (err.response && err.response.data && err.response.data.error) || fallback;
 }
 
+function formatWorkerEntries(workers) {
+  if (!Array.isArray(workers) || workers.length === 0) return 'Not recorded';
+  return workers
+    .map((worker) => {
+      if (typeof worker === 'string') return worker;
+      return `${worker.worker_name || 'Worker'}${worker.cleaned_nibs_kg != null ? ` (${formatNum(worker.cleaned_nibs_kg)} kg)` : ''}`;
+    })
+    .join(', ');
+}
+
 export default function ProcessingBatchTracking() {
   const [batchCode, setBatchCode] = useState('');
   const [data, setData] = useState(null);
@@ -61,6 +71,12 @@ export default function ProcessingBatchTracking() {
               <p>
                 Weight: {formatNum(data.beans_arrival.weight_kg)} kg | Moisture: {formatNum(data.beans_arrival.moisture_pct)}%
               </p>
+              <p>
+                Bags: {Array.isArray(data.beans_arrival.bag_details) ? data.beans_arrival.bag_details.length : 0}
+                {Array.isArray(data.beans_arrival.bag_details) && data.beans_arrival.bag_details.length > 0
+                  ? ` | ${data.beans_arrival.bag_details.map((bag) => `${bag.bag_label}: ${formatNum(bag.weight_kg)} kg @ ${formatNum(bag.moisture_pct)}%`).join(' ; ')}`
+                  : ''}
+              </p>
             </div>
 
             <div className="timeline-item">
@@ -91,7 +107,7 @@ export default function ProcessingBatchTracking() {
                 After: {data.cleaning_nibs ? `${formatNum(data.cleaning_nibs.weight_after_kg)} kg` : 'Not recorded'}
               </p>
               <p>
-                Workers: {Array.isArray(data.cleaning_nibs?.workers_involved) ? data.cleaning_nibs.workers_involved.join(', ') || 'Not recorded' : 'Not recorded'}
+                Workers: {formatWorkerEntries(data.cleaning_nibs?.workers_involved)}
                 {' | '}
                 Remarks: {data.cleaning_nibs?.remarks || 'Not recorded'}
               </p>
