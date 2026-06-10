@@ -36,6 +36,10 @@ async function getProductionBatchByNumber(productionBatchNumber) {
   return result.rows[0] || null;
 }
 
+function inventoryStatusFromStock(stockKg) {
+  return Number(stockKg || 0) > 0 ? 'Active' : 'Fully Consumed';
+}
+
 async function nextProductionBatchNumber() {
   const result = await pool.query(
     `SELECT production_batch_number
@@ -260,6 +264,133 @@ router.post('/grinding-conching', auth, async (req, res) => {
 
     await pool.query('COMMIT');
     res.status(201).json(createBatchResult.rows[0]);
+  } catch (err) {
+    try {
+      await pool.query('ROLLBACK');
+    } catch (_) {
+      // ignore rollback error
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/grinding-conching/:production_batch_number', auth, async (req, res) => {
+  const productionBatchNumber = normalizeBatchNo(req.params.production_batch_number);
+  const sourceBatchCode = String(req.body.source_batch_code || '').trim().toUpperCase();
+  const recipeId = toNumber(req.body.recipe_id);
+  const nibsQuantityUsedKg = toNumber(req.body.nibs_quantity_used_kg);
+  const startTime = req.body.start_time;
+  const endTime = req.body.end_time || null;
+  const powerFailure = Boolean(req.body.power_failure);
+  const remarks = req.body.remarks ? String(req.body.remarks).trim() : null;
+
+  if (!productionBatchNumber || !sourceBatchCode || recipeId === null || nibsQuantityUsedKg === null || !startTime) {
+    return res.status(400).json({ error: 'production_batch_number, source_batch_code, recipe_id, nibs_quantity_used_kg, and start_time are required' });
+  }
+
+  try {
+    await pool.query('BEGIN');
+
+    const batch = await getProductionBatchByNumber(productionBatchNumber);
+    if (!batch) {
+      await pool.query('ROLLBACK');
+      return res.status(404).json({ error: 'Production batch not found' });
+    }
+
+    const recipeResult = await pool.query('SELECT id FROM recipe_master WHERE id = $1 LIMIT 1', [recipeId]);
+    if (!recipeResult.rows[0]) {
+      await pool.query('ROLLBACK');
+      return res.status(404).json({ error: 'Recipe not found' });
+    }
+
+    const oldInventoryResult = await pool.query(
+      `SELECT *
+       FROM nibs_inventory
+       WHERE id = $1
+       LIMIT 1`,
+      [batch.nib_inventory_id]
+    );
+    const oldInventory = oldInventoryResult.rows[0];
+    if (!oldInventory) {
+      await pool.query('ROLLBACK');
+      return res.status(404).json({ error: 'Current source batch nib inventory not found' });
+    }
+
+    const newInventoryResult = await pool.query(
+      `SELECT *
+       FROM nibs_inventory
+       WHERE batch_code = $1
+       LIMIT 1`,
+      [sourceBatchCode]
+    );
+    const newInventory = newInventoryResult.rows[0];
+    if (!newInventory) {
+      await pool.query('ROLLBACK');
+      return res.status(404).json({ error: 'Selected source batch nib inventory not found' });
+    }
+
+    const currentUsedQtyKg = Number(batch.nibs_quantity_used_kg || 0);
+    const availableForUpdateKg = newInventory.id === oldInventory.id
+      ? Number(newInventory.available_nibs_stock_kg || 0) + currentUsedQtyKg
+      : Number(newInventory.available_nibs_stock_kg || 0);
+
+    if (nibsQuantityUsedKg > availableForUpdateKg) {
+      await pool.query('ROLLBACK');
+      return res.status(400).json({ error: 'Nibs quantity used cannot be greater than available stock' });
+    }
+
+    if (newInventory.id !== oldInventory.id) {
+      const restoredOldStockKg = Number(Number(oldInventory.available_nibs_stock_kg || 0) + currentUsedQtyKg).toFixed(2);
+      await pool.query(
+        `UPDATE nibs_inventory
+         SET available_nibs_stock_kg = $1,
+             status = $2,
+             updated_at = NOW()
+         WHERE id = $3`,
+        [restoredOldStockKg, inventoryStatusFromStock(restoredOldStockKg), oldInventory.id]
+      );
+    }
+
+    const remainingNewStockKg = Number((availableForUpdateKg - nibsQuantityUsedKg).toFixed(2));
+    await pool.query(
+      `UPDATE nibs_inventory
+       SET available_nibs_stock_kg = $1,
+           status = $2,
+           updated_at = NOW()
+       WHERE id = $3`,
+      [remainingNewStockKg, inventoryStatusFromStock(remainingNewStockKg), newInventory.id]
+    );
+
+    const result = await pool.query(
+      `UPDATE chocolate_grinding_conching
+       SET source_batch_code = $1,
+           nib_inventory_id = $2,
+           recipe_id = $3,
+           nibs_quantity_used_kg = $4,
+           remaining_nibs_stock_kg = $5,
+           start_time = $6,
+           end_time = $7,
+           power_failure = $8,
+           remarks = $9,
+           updated_at = NOW()
+       WHERE production_batch_number = $10
+       RETURNING *`,
+      [
+        sourceBatchCode,
+        newInventory.id,
+        recipeId,
+        nibsQuantityUsedKg,
+        remainingNewStockKg,
+        startTime,
+        endTime,
+        powerFailure,
+        remarks,
+        productionBatchNumber,
+      ]
+    );
+
+    await pool.query('COMMIT');
+    res.json(result.rows[0]);
   } catch (err) {
     try {
       await pool.query('ROLLBACK');

@@ -5,12 +5,22 @@ function normalizeError(err, fallback) {
   return (err.response && err.response.data && err.response.data.error) || fallback;
 }
 
-function selectBatchOptions(batchNumbers) {
+function toInputDateTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const offsetMs = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+function selectBatchOptions(batches) {
   return (
     <>
       <option value="">Select production batch...</option>
-      {batchNumbers.map((batchNo) => (
-        <option key={batchNo} value={batchNo}>{batchNo}</option>
+      {batches.map((batch) => (
+        <option key={batch.production_batch_number} value={batch.production_batch_number}>
+          {batch.production_batch_number} ({batch.status})
+        </option>
       ))}
     </>
   );
@@ -23,6 +33,7 @@ export default function ChocolateProduction() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [editingBatchNumber, setEditingBatchNumber] = useState('');
 
   const [step1, setStep1] = useState({
     source_batch_code: '',
@@ -59,6 +70,17 @@ export default function ChocolateProduction() {
     refresh();
   }, []);
 
+  const productionBatchOptions = useMemo(
+    () => Array.from(
+      new Map(
+        batches
+          .filter((item) => item.production_batch_number)
+          .map((item) => [item.production_batch_number, item])
+      ).values()
+    ),
+    [batches]
+  );
+
   const selectedInventory = useMemo(
     () => inventory.find((item) => item.batch_code === step1.source_batch_code),
     [inventory, step1.source_batch_code]
@@ -67,17 +89,6 @@ export default function ChocolateProduction() {
   const availableNibsStockKg = Number(selectedInventory?.available_nibs_stock_kg || 0);
   const nibsQuantityUsedKg = Number(step1.nibs_quantity_used_kg || 0);
   const remainingNibsStockKg = Math.max(availableNibsStockKg - nibsQuantityUsedKg, 0);
-
-  const activeProductionBatchNumbers = useMemo(
-    () => Array.from(new Set(
-      batches
-        .filter((item) => item.status !== 'Completed')
-        .map((item) => item.production_batch_number)
-        .filter(Boolean)
-    )),
-    [batches]
-  );
-
   const couvertureTotalWeightG = Math.round(Number(step2.number_of_couverture_packs || 0) * 500);
   const packedBarsPreview = Math.floor((Number(step6.total_chocolate_weight_kg || 0) * 1000) / 50);
 
@@ -108,11 +119,99 @@ export default function ChocolateProduction() {
     return null;
   };
 
+  const selectedStep2Batch = useMemo(
+    () => batches.find((item) => item.production_batch_number === step2.production_batch_number) || null,
+    [batches, step2.production_batch_number]
+  );
+  const selectedStep3Batch = useMemo(
+    () => batches.find((item) => item.production_batch_number === step3.production_batch_number) || null,
+    [batches, step3.production_batch_number]
+  );
+  const selectedStep4Batch = useMemo(
+    () => batches.find((item) => item.production_batch_number === step4.production_batch_number) || null,
+    [batches, step4.production_batch_number]
+  );
+  const selectedStep5Batch = useMemo(
+    () => batches.find((item) => item.production_batch_number === step5.production_batch_number) || null,
+    [batches, step5.production_batch_number]
+  );
+  const selectedStep6Batch = useMemo(
+    () => batches.find((item) => item.production_batch_number === step6.production_batch_number) || null,
+    [batches, step6.production_batch_number]
+  );
+  const selectedStep7Batch = useMemo(
+    () => batches.find((item) => item.production_batch_number === step7.production_batch_number) || null,
+    [batches, step7.production_batch_number]
+  );
+
+  const loadProductionBatch = (productionBatchNumber) => {
+    const batch = batches.find((item) => item.production_batch_number === productionBatchNumber);
+    if (!batch) return;
+
+    setEditingBatchNumber(batch.production_batch_number);
+    setStep1({
+      source_batch_code: batch.source_batch_code || '',
+      recipe_id: batch.recipe_id || '',
+      nibs_quantity_used_kg: batch.nibs_quantity_used_kg || '',
+      start_time: toInputDateTime(batch.start_time),
+      end_time: toInputDateTime(batch.end_time),
+      power_failure: Boolean(batch.power_failure),
+      remarks: batch.remarks || '',
+    });
+    setStep2({
+      production_batch_number: batch.production_batch_number,
+      number_of_couverture_packs: batch.number_of_couverture_packs ?? '',
+    });
+    setStep3({
+      production_batch_number: batch.production_batch_number,
+      tempering_temperature_c: batch.tempering_temperature_c ?? '',
+      remarks: batch.tempering_remarks || '',
+    });
+    setStep4({
+      production_batch_number: batch.production_batch_number,
+      weight_before_moulding_kg: batch.weight_before_moulding_kg ?? '',
+      weight_after_moulding_kg: batch.weight_after_moulding_kg ?? '',
+    });
+    setStep5({
+      production_batch_number: batch.production_batch_number,
+      demoulded_quantity: batch.demoulded_quantity ?? '',
+      broken_bars: batch.broken_bars ?? '',
+    });
+    setStep6({
+      production_batch_number: batch.production_batch_number,
+      total_chocolate_weight_kg: batch.total_chocolate_weight_kg ?? '',
+    });
+    setStep7({
+      production_batch_number: batch.production_batch_number,
+      sample_saved: Boolean(batch.sample_saved),
+      sample_weight_kg: batch.sample_weight_kg ?? '',
+    });
+  };
+
+  const clearProductionForms = () => {
+    setEditingBatchNumber('');
+    setStep1({
+      source_batch_code: '',
+      recipe_id: '',
+      nibs_quantity_used_kg: '',
+      start_time: '',
+      end_time: '',
+      power_failure: false,
+      remarks: '',
+    });
+    setStep2({ production_batch_number: '', number_of_couverture_packs: '' });
+    setStep3({ production_batch_number: '', tempering_temperature_c: '', remarks: '' });
+    setStep4({ production_batch_number: '', weight_before_moulding_kg: '', weight_after_moulding_kg: '' });
+    setStep5({ production_batch_number: '', demoulded_quantity: '', broken_bars: '' });
+    setStep6({ production_batch_number: '', total_chocolate_weight_kg: '' });
+    setStep7({ production_batch_number: '', sample_saved: false, sample_weight_kg: '' });
+  };
+
   return (
     <div>
       <div className="page-header">
         <h1>Chocolate Production</h1>
-        <p>Current flow: Grinding + Conching, Couverture Packing, Tempering, Moulding & Weighing, De-Moulding, Packing, and Sample Retention.</p>
+        <p>Create new production batches anytime, or reopen any existing batch to edit any step even after completion.</p>
       </div>
 
       <div className="card">
@@ -122,13 +221,32 @@ export default function ChocolateProduction() {
         <div className="grid-2">
           <form onSubmit={async (e) => {
             e.preventDefault();
+            const payload = {
+              ...step1,
+              source_batch_code: String(step1.source_batch_code || '').toUpperCase(),
+              recipe_id: Number(step1.recipe_id),
+            };
+
+            if (editingBatchNumber) {
+              setError('');
+              setSuccess('');
+              setLoading(true);
+              try {
+                const response = await api.put(`/chocolate-production/grinding-conching/${editingBatchNumber}`, payload);
+                setSuccess('Grinding + Conching updated');
+                fillNextSteps(response.data.production_batch_number);
+                await refresh();
+              } catch (err) {
+                setError(normalizeError(err, 'Failed to update grinding + conching'));
+              } finally {
+                setLoading(false);
+              }
+              return;
+            }
+
             const result = await submit(
               'grinding-conching',
-              {
-                ...step1,
-                source_batch_code: String(step1.source_batch_code || '').toUpperCase(),
-                recipe_id: Number(step1.recipe_id),
-              },
+              payload,
               'Grinding + Conching saved',
               () => setStep1({
                 source_batch_code: '',
@@ -147,11 +265,31 @@ export default function ChocolateProduction() {
           }}>
             <h2>Step 1 - Grinding + Conching</h2>
             <div className="form-group">
+              <label>Edit Existing Batch</label>
+              <select value={editingBatchNumber} onChange={(e) => {
+                const batchNo = e.target.value;
+                setEditingBatchNumber(batchNo);
+                if (batchNo) loadProductionBatch(batchNo);
+              }}>
+                <option value="">Create new production batch...</option>
+                {productionBatchOptions.map((batch) => (
+                  <option key={batch.production_batch_number} value={batch.production_batch_number}>
+                    {batch.production_batch_number} ({batch.status})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <button className="btn btn-secondary" type="button" onClick={clearProductionForms}>
+                Clear
+              </button>
+            </div>
+            <div className="form-group">
               <label>Source Batch Code *</label>
               <select value={step1.source_batch_code} onChange={(e) => setStep1({ ...step1, source_batch_code: e.target.value })} required>
                 <option value="">Select source batch...</option>
                 {inventory
-                  .filter((item) => Number(item.available_nibs_stock_kg || 0) > 0)
+                  .filter((item) => Number(item.available_nibs_stock_kg || 0) > 0 || item.batch_code === step1.source_batch_code)
                   .map((item) => (
                     <option key={item.id} value={item.batch_code}>
                       {item.batch_code} - {Number(item.available_nibs_stock_kg || 0).toFixed(2)} kg ({item.status})
@@ -177,7 +315,6 @@ export default function ChocolateProduction() {
               <input
                 type="number"
                 step="0.01"
-                max={availableNibsStockKg || undefined}
                 value={step1.nibs_quantity_used_kg}
                 onChange={(e) => setStep1({ ...step1, nibs_quantity_used_kg: e.target.value })}
                 required
@@ -205,13 +342,15 @@ export default function ChocolateProduction() {
               <label>Remarks</label>
               <textarea rows={3} value={step1.remarks} onChange={(e) => setStep1({ ...step1, remarks: e.target.value })} />
             </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save'}</button>
+            <button className="btn btn-primary" type="submit" disabled={loading}>
+              {loading ? 'Saving...' : editingBatchNumber ? 'Update Grinding + Conching' : 'Save Grinding + Conching'}
+            </button>
           </form>
 
           <div>
             <h2>Production Batch List</h2>
             <div className="compact-help" style={{ marginBottom: 12 }}>
-              Production batch numbers are created automatically when Grinding + Conching is saved.
+              Open any batch below to edit any step. New batches can still be created even if others are incomplete.
             </div>
             <div className="table-wrap">
               <table>
@@ -221,17 +360,23 @@ export default function ChocolateProduction() {
                     <th>Source</th>
                     <th>Recipe</th>
                     <th>Status</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {batches.length === 0 ? (
-                    <tr><td colSpan={4} style={{ color: 'var(--text-muted)' }}>No production batches yet</td></tr>
-                  ) : batches.slice(0, 10).map((item) => (
+                    <tr><td colSpan={5} style={{ color: 'var(--text-muted)' }}>No production batches yet</td></tr>
+                  ) : batches.slice(0, 20).map((item) => (
                     <tr key={item.id}>
                       <td><strong>{item.production_batch_number}</strong></td>
                       <td>{item.source_batch_code}</td>
                       <td>{item.recipe_name || 'N/A'}</td>
                       <td><span className={`badge ${item.status === 'Completed' ? 'badge-completed' : 'badge-active'}`}>{item.status}</span></td>
+                      <td>
+                        <button className="btn btn-sm btn-secondary" type="button" onClick={() => loadProductionBatch(item.production_batch_number)}>
+                          Edit
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -248,15 +393,22 @@ export default function ChocolateProduction() {
             submit(
               'couverture-packing',
               step2,
-              'Couverture Packing saved',
+              selectedStep2Batch?.number_of_couverture_packs != null ? 'Couverture Packing updated' : 'Couverture Packing saved',
               () => setStep2({ production_batch_number: step2.production_batch_number, number_of_couverture_packs: '' })
             );
           }}>
             <h2>Step 2 - Couverture Packing</h2>
             <div className="form-group">
               <label>Production Batch Number *</label>
-              <select value={step2.production_batch_number} onChange={(e) => setStep2({ ...step2, production_batch_number: e.target.value })} required>
-                {selectBatchOptions(activeProductionBatchNumbers)}
+              <select value={step2.production_batch_number} onChange={(e) => {
+                const batchNo = e.target.value;
+                const batch = batches.find((item) => item.production_batch_number === batchNo);
+                setStep2({
+                  production_batch_number: batchNo,
+                  number_of_couverture_packs: batch?.number_of_couverture_packs ?? '',
+                });
+              }} required>
+                {selectBatchOptions(productionBatchOptions)}
               </select>
             </div>
             <div className="form-group">
@@ -267,7 +419,7 @@ export default function ChocolateProduction() {
               <label>Total Weight</label>
               <input value={step2.number_of_couverture_packs ? `${couvertureTotalWeightG} g` : ''} readOnly placeholder="Auto-calculated at 500 g per pack" />
             </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save'}</button>
+            <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : selectedStep2Batch?.number_of_couverture_packs != null ? 'Update Couverture Packing' : 'Save Couverture Packing'}</button>
           </form>
 
           <form onSubmit={(e) => {
@@ -275,15 +427,23 @@ export default function ChocolateProduction() {
             submit(
               'tempering',
               step3,
-              'Tempering saved',
+              selectedStep3Batch?.tempering_temperature_c != null ? 'Tempering updated' : 'Tempering saved',
               () => setStep3({ production_batch_number: step3.production_batch_number, tempering_temperature_c: '', remarks: '' })
             );
           }}>
             <h2>Step 3 - Tempering</h2>
             <div className="form-group">
               <label>Production Batch Number *</label>
-              <select value={step3.production_batch_number} onChange={(e) => setStep3({ ...step3, production_batch_number: e.target.value })} required>
-                {selectBatchOptions(activeProductionBatchNumbers)}
+              <select value={step3.production_batch_number} onChange={(e) => {
+                const batchNo = e.target.value;
+                const batch = batches.find((item) => item.production_batch_number === batchNo);
+                setStep3({
+                  production_batch_number: batchNo,
+                  tempering_temperature_c: batch?.tempering_temperature_c ?? '',
+                  remarks: batch?.tempering_remarks || '',
+                });
+              }} required>
+                {selectBatchOptions(productionBatchOptions)}
               </select>
             </div>
             <div className="form-group">
@@ -294,7 +454,7 @@ export default function ChocolateProduction() {
               <label>Remarks</label>
               <textarea rows={3} value={step3.remarks} onChange={(e) => setStep3({ ...step3, remarks: e.target.value })} />
             </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save'}</button>
+            <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : selectedStep3Batch?.tempering_temperature_c != null ? 'Update Tempering' : 'Save Tempering'}</button>
           </form>
         </div>
       </div>
@@ -306,15 +466,23 @@ export default function ChocolateProduction() {
             submit(
               'moulding-weighing',
               step4,
-              'Moulding & Weighing saved',
+              selectedStep4Batch?.weight_before_moulding_kg != null ? 'Moulding & Weighing updated' : 'Moulding & Weighing saved',
               () => setStep4({ production_batch_number: step4.production_batch_number, weight_before_moulding_kg: '', weight_after_moulding_kg: '' })
             );
           }}>
             <h2>Step 4 - Moulding & Weighing</h2>
             <div className="form-group">
               <label>Production Batch Number *</label>
-              <select value={step4.production_batch_number} onChange={(e) => setStep4({ ...step4, production_batch_number: e.target.value })} required>
-                {selectBatchOptions(activeProductionBatchNumbers)}
+              <select value={step4.production_batch_number} onChange={(e) => {
+                const batchNo = e.target.value;
+                const batch = batches.find((item) => item.production_batch_number === batchNo);
+                setStep4({
+                  production_batch_number: batchNo,
+                  weight_before_moulding_kg: batch?.weight_before_moulding_kg ?? '',
+                  weight_after_moulding_kg: batch?.weight_after_moulding_kg ?? '',
+                });
+              }} required>
+                {selectBatchOptions(productionBatchOptions)}
               </select>
             </div>
             <div className="form-group">
@@ -325,7 +493,7 @@ export default function ChocolateProduction() {
               <label>Weight After Moulding *</label>
               <input type="number" step="0.01" value={step4.weight_after_moulding_kg} onChange={(e) => setStep4({ ...step4, weight_after_moulding_kg: e.target.value })} required />
             </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save'}</button>
+            <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : selectedStep4Batch?.weight_before_moulding_kg != null ? 'Update Moulding & Weighing' : 'Save Moulding & Weighing'}</button>
           </form>
 
           <form onSubmit={(e) => {
@@ -333,15 +501,23 @@ export default function ChocolateProduction() {
             submit(
               'demoulding',
               step5,
-              'De-Moulding saved',
+              selectedStep5Batch?.demoulded_quantity != null ? 'De-Moulding updated' : 'De-Moulding saved',
               () => setStep5({ production_batch_number: step5.production_batch_number, demoulded_quantity: '', broken_bars: '' })
             );
           }}>
             <h2>Step 5 - De-Moulding</h2>
             <div className="form-group">
               <label>Production Batch Number *</label>
-              <select value={step5.production_batch_number} onChange={(e) => setStep5({ ...step5, production_batch_number: e.target.value })} required>
-                {selectBatchOptions(activeProductionBatchNumbers)}
+              <select value={step5.production_batch_number} onChange={(e) => {
+                const batchNo = e.target.value;
+                const batch = batches.find((item) => item.production_batch_number === batchNo);
+                setStep5({
+                  production_batch_number: batchNo,
+                  demoulded_quantity: batch?.demoulded_quantity ?? '',
+                  broken_bars: batch?.broken_bars ?? '',
+                });
+              }} required>
+                {selectBatchOptions(productionBatchOptions)}
               </select>
             </div>
             <div className="form-group">
@@ -352,7 +528,7 @@ export default function ChocolateProduction() {
               <label>Broken Bars</label>
               <input type="number" value={step5.broken_bars} onChange={(e) => setStep5({ ...step5, broken_bars: e.target.value })} />
             </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save'}</button>
+            <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : selectedStep5Batch?.demoulded_quantity != null ? 'Update De-Moulding' : 'Save De-Moulding'}</button>
           </form>
         </div>
       </div>
@@ -364,15 +540,22 @@ export default function ChocolateProduction() {
             submit(
               'packing',
               step6,
-              'Packing saved (bars auto-calculated)',
+              selectedStep6Batch?.total_chocolate_weight_kg != null ? 'Packing updated' : 'Packing saved (bars auto-calculated)',
               () => setStep6({ production_batch_number: step6.production_batch_number, total_chocolate_weight_kg: '' })
             );
           }}>
             <h2>Step 6 - Packing</h2>
             <div className="form-group">
               <label>Production Batch Number *</label>
-              <select value={step6.production_batch_number} onChange={(e) => setStep6({ ...step6, production_batch_number: e.target.value })} required>
-                {selectBatchOptions(activeProductionBatchNumbers)}
+              <select value={step6.production_batch_number} onChange={(e) => {
+                const batchNo = e.target.value;
+                const batch = batches.find((item) => item.production_batch_number === batchNo);
+                setStep6({
+                  production_batch_number: batchNo,
+                  total_chocolate_weight_kg: batch?.total_chocolate_weight_kg ?? '',
+                });
+              }} required>
+                {selectBatchOptions(productionBatchOptions)}
               </select>
             </div>
             <div className="form-group">
@@ -383,7 +566,7 @@ export default function ChocolateProduction() {
               <label>Packed Bars</label>
               <input value={step6.total_chocolate_weight_kg ? String(packedBarsPreview) : ''} readOnly placeholder="Auto-calculated at 50 g per bar" />
             </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save'}</button>
+            <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : selectedStep6Batch?.total_chocolate_weight_kg != null ? 'Update Packing' : 'Save Packing'}</button>
           </form>
 
           <form onSubmit={(e) => {
@@ -391,15 +574,23 @@ export default function ChocolateProduction() {
             submit(
               'sample-retention',
               step7,
-              'Sample Retention saved and batch completed',
+              selectedStep7Batch?.finished_at ? 'Sample Retention updated' : 'Sample Retention saved and batch completed',
               () => setStep7({ production_batch_number: step7.production_batch_number, sample_saved: false, sample_weight_kg: '' })
             );
           }}>
             <h2>Step 7 - Sample Retention</h2>
             <div className="form-group">
               <label>Production Batch Number *</label>
-              <select value={step7.production_batch_number} onChange={(e) => setStep7({ ...step7, production_batch_number: e.target.value })} required>
-                {selectBatchOptions(activeProductionBatchNumbers)}
+              <select value={step7.production_batch_number} onChange={(e) => {
+                const batchNo = e.target.value;
+                const batch = batches.find((item) => item.production_batch_number === batchNo);
+                setStep7({
+                  production_batch_number: batchNo,
+                  sample_saved: Boolean(batch?.sample_saved),
+                  sample_weight_kg: batch?.sample_weight_kg ?? '',
+                });
+              }} required>
+                {selectBatchOptions(productionBatchOptions)}
               </select>
             </div>
             <div className="form-group">
@@ -412,7 +603,7 @@ export default function ChocolateProduction() {
               <label>Sample Weight (kg)</label>
               <input type="number" step="0.01" value={step7.sample_weight_kg} onChange={(e) => setStep7({ ...step7, sample_weight_kg: e.target.value })} />
             </div>
-            <button className="btn btn-accent" type="submit" disabled={loading}>{loading ? 'Saving...' : 'Finish Batch'}</button>
+            <button className="btn btn-accent" type="submit" disabled={loading}>{loading ? 'Saving...' : selectedStep7Batch?.finished_at ? 'Update Sample Retention' : 'Finish Batch'}</button>
           </form>
         </div>
       </div>

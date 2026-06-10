@@ -10,6 +10,14 @@ function toNumber(value) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
+function cloneWorkers(workers) {
+  if (!Array.isArray(workers)) return [];
+  return workers.map((worker) => ({
+    worker_name: worker.worker_name || '',
+    cleaned_nibs_kg: worker.cleaned_nibs_kg || '',
+  }));
+}
+
 export default function CocoaProcessing() {
   const [batches, setBatches] = useState([]);
   const [sourceBatches, setSourceBatches] = useState([]);
@@ -110,6 +118,11 @@ export default function CocoaProcessing() {
     [beansArrival.bag_details]
   );
 
+  const selectedBeansArrivalBatch = useMemo(
+    () => batches.find((item) => item.batch_code === String(beansArrival.batch_code || '').toUpperCase()) || null,
+    [batches, beansArrival.batch_code]
+  );
+
   const selectedRoastingBatch = useMemo(
     () => batches.find((item) => item.batch_code === String(roasting.batch_code || '').toUpperCase()) || null,
     [batches, roasting.batch_code]
@@ -120,6 +133,16 @@ export default function CocoaProcessing() {
     [batches, winnowing.batch_code]
   );
 
+  const selectedCleaningBatch = useMemo(
+    () => batches.find((item) => item.batch_code === String(cleaning.batch_code || '').toUpperCase()) || null,
+    [batches, cleaning.batch_code]
+  );
+
+  const selectedPackingBatch = useMemo(
+    () => batches.find((item) => item.batch_code === String(nibsPacking.batch_code || '').toUpperCase()) || null,
+    [batches, nibsPacking.batch_code]
+  );
+
   const remainingToRoastKg = useMemo(() => {
     if (!selectedRoastingBatch) return 0;
     const totalWeight = toNumber(selectedRoastingBatch.weight_kg);
@@ -127,12 +150,104 @@ export default function CocoaProcessing() {
     return Number(Math.max(totalWeight - totalRoasted, 0).toFixed(2));
   }, [selectedRoastingBatch]);
 
-  const roastingQuantityMax = remainingToRoastKg > 0 ? Math.min(10, remainingToRoastKg) : 10;
+  const roastingQuantityMax = editingRoastId
+    ? 10
+    : (remainingToRoastKg > 0 ? Math.min(10, remainingToRoastKg) : 10);
 
   const cleaningTotalKg = useMemo(
     () => cleaning.workers_involved.reduce((sum, worker) => sum + toNumber(worker.cleaned_nibs_kg), 0),
     [cleaning.workers_involved]
   );
+
+  const loadBeansArrivalBatch = (batchCode) => {
+    const batch = batches.find((item) => item.batch_code === String(batchCode || '').toUpperCase());
+    if (!batch) return;
+    setBeansArrival({
+      batch_code: batch.batch_code,
+      bag_weight_kg: '',
+      bag_moisture_pct: '',
+      bag_details: Array.isArray(batch.bag_details)
+        ? batch.bag_details.map((bag, index) => ({
+            bag_label: bag.bag_label || `Bag ${index + 1}`,
+            weight_kg: bag.weight_kg,
+            moisture_pct: bag.moisture_pct,
+          }))
+        : [],
+    });
+  };
+
+  const clearBeansArrival = () => {
+    setBeansArrival({
+      batch_code: '',
+      bag_weight_kg: '',
+      bag_moisture_pct: '',
+      bag_details: [],
+    });
+  };
+
+  const loadRoastingBatch = (batchCode) => {
+    const normalizedBatchCode = String(batchCode || '').toUpperCase();
+    setEditingRoastId(null);
+    setRoasting({
+      batch_code: normalizedBatchCode,
+      quantity_roasted_kg: '',
+      weight_after_roasting_kg: '',
+      moisture_after_roasting_pct: '',
+    });
+    setSelectedBatchCodeForRoast(normalizedBatchCode);
+  };
+
+  const loadWinnowingBatch = (batchCode) => {
+    const batch = batches.find((item) => item.batch_code === String(batchCode || '').toUpperCase());
+    if (!batch) return;
+    setWinnowing({
+      batch_code: batch.batch_code,
+      weight_before_kg: String(toNumber(batch.total_weight_after_roasting_kg).toFixed(2)),
+      weight_after_kg: batch.winnowing_weight_after_kg ?? '',
+    });
+  };
+
+  const clearWinnowing = () => {
+    setWinnowing({ batch_code: '', weight_before_kg: '', weight_after_kg: '' });
+  };
+
+  const loadCleaningBatch = (batchCode) => {
+    const batch = batches.find((item) => item.batch_code === String(batchCode || '').toUpperCase());
+    if (!batch) return;
+    setCleaning({
+      batch_code: batch.batch_code,
+      weight_before_kg: batch.cleaning_weight_before_kg ?? '',
+      selected_worker: '',
+      worker_cleaned_kg: '',
+      workers_involved: cloneWorkers(batch.workers_involved),
+      remarks: batch.cleaning_remarks || '',
+    });
+  };
+
+  const clearCleaning = () => {
+    setCleaning({
+      batch_code: '',
+      weight_before_kg: '',
+      selected_worker: '',
+      worker_cleaned_kg: '',
+      workers_involved: [],
+      remarks: '',
+    });
+  };
+
+  const loadPackingBatch = (batchCode) => {
+    const batch = batches.find((item) => item.batch_code === String(batchCode || '').toUpperCase());
+    if (!batch) return;
+    setNibsPacking({
+      batch_code: batch.batch_code,
+      total_nibs_weight_kg: batch.total_nibs_weight_kg ?? '',
+      number_of_bags: batch.number_of_bags ?? '',
+    });
+  };
+
+  const clearPacking = () => {
+    setNibsPacking({ batch_code: '', total_nibs_weight_kg: '', number_of_bags: '' });
+  };
 
   useEffect(() => {
     if (!selectedWinnowingBatch) return;
@@ -168,7 +283,9 @@ export default function CocoaProcessing() {
   const removeBeansArrivalBag = (indexToRemove) => {
     setBeansArrival((current) => ({
       ...current,
-      bag_details: current.bag_details.filter((_, index) => index !== indexToRemove),
+      bag_details: current.bag_details
+        .filter((_, index) => index !== indexToRemove)
+        .map((bag, index) => ({ ...bag, bag_label: `Bag ${index + 1}` })),
     }));
   };
 
@@ -250,14 +367,9 @@ export default function CocoaProcessing() {
         batch_code: batchCode,
         bag_details: beansArrival.bag_details,
       });
-      setSuccess('Beans Arrival saved with bag-wise details');
+      setSuccess(selectedBeansArrivalBatch ? 'Beans Arrival updated' : 'Beans Arrival saved with bag-wise details');
       const savedBatchCode = String(response.data?.batch_code || batchCode).toUpperCase();
-      setBeansArrival({
-        batch_code: '',
-        bag_weight_kg: '',
-        bag_moisture_pct: '',
-        bag_details: [],
-      });
+      clearBeansArrival();
       setRoasting((current) => ({ ...current, batch_code: savedBatchCode }));
       setWinnowing((current) => ({ ...current, batch_code: savedBatchCode }));
       setCleaning((current) => ({ ...current, batch_code: savedBatchCode }));
@@ -319,15 +431,14 @@ export default function CocoaProcessing() {
     setSuccess('');
     setLoading(true);
     try {
-      const response = await api.post('/cocoa-processing/winnowing', {
+      const batchCode = String(winnowing.batch_code || '').toUpperCase();
+      await api.post('/cocoa-processing/winnowing', {
         ...winnowing,
-        batch_code: String(winnowing.batch_code || '').toUpperCase(),
+        batch_code: batchCode,
       });
-      setSuccess('Winnowing saved');
-      const savedBatchCode = String(response.data?.batch_code || winnowing.batch_code || '').toUpperCase();
-      setWinnowing({ batch_code: '', weight_before_kg: '', weight_after_kg: '' });
-      setCleaning((current) => ({ ...current, batch_code: savedBatchCode }));
-      setNibsPacking((current) => ({ ...current, batch_code: savedBatchCode }));
+      setSuccess(selectedWinnowingBatch?.winnowing_weight_after_kg != null ? 'Winnowing updated' : 'Winnowing saved');
+      setCleaning((current) => ({ ...current, batch_code: batchCode }));
+      setNibsPacking((current) => ({ ...current, batch_code: batchCode }));
       await refresh();
     } catch (err) {
       setError(normalizeError(err, 'Failed to save winnowing'));
@@ -350,15 +461,7 @@ export default function CocoaProcessing() {
         workers_involved: cleaning.workers_involved,
         remarks: cleaning.remarks,
       });
-      setSuccess('Cleaning Nibs saved with worker totals');
-      setCleaning({
-        batch_code: '',
-        weight_before_kg: '',
-        selected_worker: '',
-        worker_cleaned_kg: '',
-        workers_involved: [],
-        remarks: '',
-      });
+      setSuccess(selectedCleaningBatch?.cleaning_weight_after_kg != null ? 'Cleaning Nibs updated' : 'Cleaning Nibs saved with worker totals');
       setNibsPacking((current) => ({ ...current, batch_code: batchCode }));
       await refresh();
     } catch (err) {
@@ -378,8 +481,7 @@ export default function CocoaProcessing() {
         ...nibsPacking,
         batch_code: String(nibsPacking.batch_code || '').toUpperCase(),
       });
-      setSuccess('Nibs Packing saved and inventory updated');
-      setNibsPacking({ batch_code: '', total_nibs_weight_kg: '', number_of_bags: '' });
+      setSuccess(selectedPackingBatch?.total_nibs_weight_kg != null ? 'Nibs Packing updated' : 'Nibs Packing saved and inventory updated');
       await refresh();
     } catch (err) {
       setError(normalizeError(err, 'Failed to save nibs packing'));
@@ -392,7 +494,7 @@ export default function CocoaProcessing() {
     <div>
       <div className="page-header">
         <h1>Cocoa Processing</h1>
-        <p>Use simple bag-wise entry, repeated roasting saves, automatic roasting totals, and worker-wise cleaned nib tracking.</p>
+        <p>Work on any batch at any time, edit every saved step, and keep bag-wise moisture plus worker-wise cleaning details.</p>
       </div>
 
       <div className="card">
@@ -415,6 +517,14 @@ export default function CocoaProcessing() {
                   <option key={code} value={code} />
                 ))}
               </datalist>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <button className="btn btn-secondary" type="button" onClick={() => loadBeansArrivalBatch(beansArrival.batch_code)} disabled={!selectedBeansArrivalBatch}>
+                Load Existing
+              </button>
+              <button className="btn btn-secondary" type="button" onClick={clearBeansArrival} style={{ marginLeft: 8 }}>
+                Clear
+              </button>
             </div>
 
             <div className="soft-panel" style={{ marginBottom: 16 }}>
@@ -495,7 +605,7 @@ export default function CocoaProcessing() {
             </div>
 
             <button className="btn btn-primary" type="submit" disabled={loading || beansArrival.bag_details.length === 0}>
-              {loading ? 'Saving...' : 'Save Beans Arrival'}
+              {loading ? 'Saving...' : selectedBeansArrivalBatch ? 'Update Beans Arrival' : 'Save Beans Arrival'}
             </button>
           </form>
 
@@ -507,17 +617,7 @@ export default function CocoaProcessing() {
                 <input
                   list="processing-batch-codes"
                   value={roasting.batch_code}
-                  onChange={(e) => {
-                    const batchCode = e.target.value.toUpperCase();
-                    setRoasting({
-                      batch_code: batchCode,
-                      quantity_roasted_kg: '',
-                      weight_after_roasting_kg: '',
-                      moisture_after_roasting_pct: '',
-                    });
-                    setSelectedBatchCodeForRoast(batchCode);
-                    setEditingRoastId(null);
-                  }}
+                  onChange={(e) => loadRoastingBatch(e.target.value)}
                   placeholder="Select or type processing batch"
                   required
                 />
@@ -544,7 +644,7 @@ export default function CocoaProcessing() {
               </div>
 
               <div className="compact-help" style={{ marginBottom: 12 }}>
-                Each save creates a new roasting entry for this batch. Each single entry can be up to 10 kg.
+                You can open any batch for roasting. New saves create new roast entries, and existing roast entries can be edited below.
               </div>
 
               <div className="form-group">
@@ -640,6 +740,14 @@ export default function CocoaProcessing() {
                 required
               />
             </div>
+            <div style={{ marginBottom: 14 }}>
+              <button className="btn btn-secondary" type="button" onClick={() => loadWinnowingBatch(winnowing.batch_code)} disabled={!selectedWinnowingBatch}>
+                Load Existing
+              </button>
+              <button className="btn btn-secondary" type="button" onClick={clearWinnowing} style={{ marginLeft: 8 }}>
+                Clear
+              </button>
+            </div>
             <div className="compact-help" style={{ marginBottom: 12 }}>
               Weight before winnowing is filled automatically from the total weight after roasting for this batch.
             </div>
@@ -651,7 +759,9 @@ export default function CocoaProcessing() {
               <label>Weight After Winnowing *</label>
               <input type="number" step="0.01" value={winnowing.weight_after_kg} onChange={(e) => setWinnowing({ ...winnowing, weight_after_kg: e.target.value })} required />
             </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>{loading ? 'Saving...' : 'Save Winnowing'}</button>
+            <button className="btn btn-primary" type="submit" disabled={loading}>
+              {loading ? 'Saving...' : selectedWinnowingBatch?.winnowing_weight_after_kg != null ? 'Update Winnowing' : 'Save Winnowing'}
+            </button>
           </form>
 
           <form onSubmit={saveCleaning}>
@@ -679,6 +789,14 @@ export default function CocoaProcessing() {
                 placeholder="Select or type processing batch"
                 required
               />
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <button className="btn btn-secondary" type="button" onClick={() => loadCleaningBatch(cleaning.batch_code)} disabled={!selectedCleaningBatch}>
+                Load Existing
+              </button>
+              <button className="btn btn-secondary" type="button" onClick={clearCleaning} style={{ marginLeft: 8 }}>
+                Clear
+              </button>
             </div>
             <div className="form-group">
               <label>Weight Before Cleaning *</label>
@@ -748,7 +866,7 @@ export default function CocoaProcessing() {
               <textarea value={cleaning.remarks} onChange={(e) => setCleaning({ ...cleaning, remarks: e.target.value })} rows={3} />
             </div>
             <button className="btn btn-primary" type="submit" disabled={loading || cleaning.workers_involved.length === 0}>
-              {loading ? 'Saving...' : 'Save Cleaning Nibs'}
+              {loading ? 'Saving...' : selectedCleaningBatch?.cleaning_weight_after_kg != null ? 'Update Cleaning Nibs' : 'Save Cleaning Nibs'}
             </button>
           </form>
         </div>
@@ -768,6 +886,14 @@ export default function CocoaProcessing() {
                 required
               />
             </div>
+            <div style={{ marginBottom: 14 }}>
+              <button className="btn btn-secondary" type="button" onClick={() => loadPackingBatch(nibsPacking.batch_code)} disabled={!selectedPackingBatch}>
+                Load Existing
+              </button>
+              <button className="btn btn-secondary" type="button" onClick={clearPacking} style={{ marginLeft: 8 }}>
+                Clear
+              </button>
+            </div>
             <div className="form-group">
               <label>Total Nibs Weight (kg) *</label>
               <input type="number" step="0.01" value={nibsPacking.total_nibs_weight_kg} onChange={(e) => setNibsPacking({ ...nibsPacking, total_nibs_weight_kg: e.target.value })} required />
@@ -776,43 +902,80 @@ export default function CocoaProcessing() {
               <label>Number Of Bags *</label>
               <input type="number" value={nibsPacking.number_of_bags} onChange={(e) => setNibsPacking({ ...nibsPacking, number_of_bags: e.target.value })} required />
             </div>
-            <button className="btn btn-accent" type="submit" disabled={loading}>{loading ? 'Saving...' : 'Complete Batch'}</button>
+            <button className="btn btn-accent" type="submit" disabled={loading}>
+              {loading ? 'Saving...' : selectedPackingBatch?.total_nibs_weight_kg != null ? 'Update Nibs Packing' : 'Save Nibs Packing'}
+            </button>
           </form>
 
           <div>
-            <h2>Roasting Lookup</h2>
-            <div className="form-group">
-              <label>Batch Code</label>
-              <input
-                list="processing-batch-codes"
-                value={selectedBatchCodeForRoast}
-                onChange={(e) => setSelectedBatchCodeForRoast(e.target.value.toUpperCase())}
-                placeholder="Select or type processing batch"
-              />
+            <h2>Processing Batch Quick Edit</h2>
+            <div className="compact-help" style={{ marginBottom: 12 }}>
+              Open any batch in any step without waiting for another batch to finish first.
             </div>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Entry</th>
-                    <th>Qty Roasted</th>
-                    <th>Weight After</th>
-                    <th>Moisture After</th>
+                    <th>Batch</th>
+                    <th>Beans</th>
+                    <th>Roasting</th>
+                    <th>Winnowing</th>
+                    <th>Cleaning</th>
+                    <th>Packing</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {roastLots.length === 0 ? (
-                    <tr><td colSpan={4} style={{ color: 'var(--text-muted)' }}>No roasting entries</td></tr>
-                  ) : roastLots.map((lot) => (
-                    <tr key={lot.id}>
-                      <td>{lot.roast_lot_number}</td>
-                      <td>{lot.quantity_roasted_kg}</td>
-                      <td>{lot.weight_after_roasting_kg}</td>
-                      <td>{lot.moisture_after_roasting_pct}</td>
+                  {batches.length === 0 ? (
+                    <tr><td colSpan={6} style={{ color: 'var(--text-muted)' }}>No processing batches yet</td></tr>
+                  ) : batches.map((batch) => (
+                    <tr key={batch.id}>
+                      <td><strong>{batch.batch_code}</strong></td>
+                      <td><button className="btn btn-sm btn-secondary" type="button" onClick={() => loadBeansArrivalBatch(batch.batch_code)}>Edit</button></td>
+                      <td><button className="btn btn-sm btn-secondary" type="button" onClick={() => loadRoastingBatch(batch.batch_code)}>Open</button></td>
+                      <td><button className="btn btn-sm btn-secondary" type="button" onClick={() => loadWinnowingBatch(batch.batch_code)}>Edit</button></td>
+                      <td><button className="btn btn-sm btn-secondary" type="button" onClick={() => loadCleaningBatch(batch.batch_code)}>Edit</button></td>
+                      <td><button className="btn btn-sm btn-secondary" type="button" onClick={() => loadPackingBatch(batch.batch_code)}>Edit</button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            <div style={{ marginTop: 22 }}>
+              <h2>Roasting Lookup</h2>
+              <div className="form-group">
+                <label>Batch Code</label>
+                <input
+                  list="processing-batch-codes"
+                  value={selectedBatchCodeForRoast}
+                  onChange={(e) => setSelectedBatchCodeForRoast(e.target.value.toUpperCase())}
+                  placeholder="Select or type processing batch"
+                />
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Entry</th>
+                      <th>Qty Roasted</th>
+                      <th>Weight After</th>
+                      <th>Moisture After</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roastLots.length === 0 ? (
+                      <tr><td colSpan={4} style={{ color: 'var(--text-muted)' }}>No roasting entries</td></tr>
+                    ) : roastLots.map((lot) => (
+                      <tr key={lot.id}>
+                        <td>{lot.roast_lot_number}</td>
+                        <td>{lot.quantity_roasted_kg}</td>
+                        <td>{lot.weight_after_roasting_kg}</td>
+                        <td>{lot.moisture_after_roasting_pct}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
