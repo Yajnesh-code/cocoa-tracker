@@ -30,6 +30,7 @@ export default function CocoaProcessing() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [newWorkerName, setNewWorkerName] = useState('');
+  const [currentBatchCode, setCurrentBatchCode] = useState('');
 
   const [beansArrival, setBeansArrival] = useState({
     batch_code: '',
@@ -149,10 +150,13 @@ export default function CocoaProcessing() {
   const loadBeansArrivalBatch = (batchCode) => {
     const batch = batches.find((item) => item.batch_code === String(batchCode || '').toUpperCase());
     if (!batch) {
-      setError('Beans Arrival batch not found');
+      setError('');
+      setSuccess('This is a new batch. Add bag details and save Step 1 first.');
       return;
     }
     setError('');
+    setSuccess(`Loaded existing Beans Arrival for ${batch.batch_code}`);
+    setCurrentBatchCode(batch.batch_code);
     setBeansArrival({
       batch_code: batch.batch_code,
       bag_weight_kg: '',
@@ -178,6 +182,7 @@ export default function CocoaProcessing() {
 
   const loadRoastingBatch = (batchCode) => {
     const normalizedBatchCode = String(batchCode || '').toUpperCase();
+    setError('');
     setEditingRoastId(null);
     setRoasting({
       batch_code: normalizedBatchCode,
@@ -191,10 +196,13 @@ export default function CocoaProcessing() {
   const loadWinnowingBatch = (batchCode) => {
     const batch = batches.find((item) => item.batch_code === String(batchCode || '').toUpperCase());
     if (!batch) {
-      setError('Winnowing batch not found');
+      setError('');
+      setSuccess('Batch not found in cocoa processing yet. Save Step 1 first.');
       return;
     }
     setError('');
+    setSuccess(`Loaded Winnowing for ${batch.batch_code}`);
+    setCurrentBatchCode(batch.batch_code);
     setWinnowing({
       batch_code: batch.batch_code,
       weight_before_kg: String(toNumber(batch.total_weight_after_roasting_kg).toFixed(2)),
@@ -209,10 +217,13 @@ export default function CocoaProcessing() {
   const loadCleaningBatch = (batchCode) => {
     const batch = batches.find((item) => item.batch_code === String(batchCode || '').toUpperCase());
     if (!batch) {
-      setError('Cleaning batch not found');
+      setError('');
+      setSuccess('Batch not found in cocoa processing yet. Save Step 1 first.');
       return;
     }
     setError('');
+    setSuccess(`Loaded Cleaning Nibs for ${batch.batch_code}`);
+    setCurrentBatchCode(batch.batch_code);
     setCleaning({
       batch_code: batch.batch_code,
       weight_before_kg: batch.cleaning_weight_before_kg ?? '',
@@ -237,10 +248,13 @@ export default function CocoaProcessing() {
   const loadPackingBatch = (batchCode) => {
     const batch = batches.find((item) => item.batch_code === String(batchCode || '').toUpperCase());
     if (!batch) {
-      setError('Nibs packing batch not found');
+      setError('');
+      setSuccess('Batch not found in cocoa processing yet. Save Step 1 first.');
       return;
     }
     setError('');
+    setSuccess(`Loaded Nibs Packing for ${batch.batch_code}`);
+    setCurrentBatchCode(batch.batch_code);
     setNibsPacking({
       batch_code: batch.batch_code,
       total_nibs_weight_kg: batch.total_nibs_weight_kg ?? '',
@@ -372,11 +386,24 @@ export default function CocoaProcessing() {
       });
       setSuccess(selectedBeansArrivalBatch ? 'Beans Arrival updated' : 'Beans Arrival saved with bag-wise details');
       const savedBatchCode = String(response.data?.batch_code || batchCode).toUpperCase();
+      setCurrentBatchCode(savedBatchCode);
       clearBeansArrival();
-      setRoasting((current) => ({ ...current, batch_code: savedBatchCode }));
-      setWinnowing((current) => ({ ...current, batch_code: savedBatchCode }));
-      setCleaning((current) => ({ ...current, batch_code: savedBatchCode }));
-      setNibsPacking((current) => ({ ...current, batch_code: savedBatchCode }));
+      setRoasting({
+        batch_code: savedBatchCode,
+        quantity_roasted_kg: '',
+        weight_after_roasting_kg: '',
+        moisture_after_roasting_pct: '',
+      });
+      setWinnowing({ batch_code: savedBatchCode, weight_before_kg: '', weight_after_kg: '' });
+      setCleaning({
+        batch_code: savedBatchCode,
+        weight_before_kg: '',
+        selected_worker: '',
+        worker_cleaned_kg: '',
+        workers_involved: [],
+        remarks: '',
+      });
+      setNibsPacking({ batch_code: savedBatchCode, total_nibs_weight_kg: '', number_of_bags: '' });
       setSelectedBatchCodeForRoast(savedBatchCode);
       await refresh();
     } catch (err) {
@@ -415,6 +442,7 @@ export default function CocoaProcessing() {
         weight_after_roasting_kg: '',
         moisture_after_roasting_pct: '',
       });
+      setCurrentBatchCode(batchCode);
       setEditingRoastId(null);
       setWinnowing((current) => ({ ...current, batch_code: batchCode }));
       setCleaning((current) => ({ ...current, batch_code: batchCode }));
@@ -440,6 +468,7 @@ export default function CocoaProcessing() {
         batch_code: batchCode,
       });
       setSuccess(selectedWinnowingBatch?.winnowing_weight_after_kg != null ? 'Winnowing updated' : 'Winnowing saved');
+      setCurrentBatchCode(batchCode);
       setCleaning((current) => ({ ...current, batch_code: batchCode }));
       setNibsPacking((current) => ({ ...current, batch_code: batchCode }));
       await refresh();
@@ -465,6 +494,7 @@ export default function CocoaProcessing() {
         remarks: cleaning.remarks,
       });
       setSuccess(selectedCleaningBatch?.cleaning_weight_after_kg != null ? 'Cleaning Nibs updated' : 'Cleaning Nibs saved with worker totals');
+      setCurrentBatchCode(batchCode);
       setNibsPacking((current) => ({ ...current, batch_code: batchCode }));
       await refresh();
     } catch (err) {
@@ -485,6 +515,7 @@ export default function CocoaProcessing() {
         batch_code: String(nibsPacking.batch_code || '').toUpperCase(),
       });
       setSuccess(selectedPackingBatch?.total_nibs_weight_kg != null ? 'Nibs Packing updated' : 'Nibs Packing saved and inventory updated');
+      setCurrentBatchCode(String(nibsPacking.batch_code || '').toUpperCase());
       await refresh();
     } catch (err) {
       setError(normalizeError(err, 'Failed to save nibs packing'));
@@ -503,6 +534,11 @@ export default function CocoaProcessing() {
       <div className="card">
         {error ? <div className="alert alert-error">{error}</div> : null}
         {success ? <div className="alert alert-success">{success}</div> : null}
+        {currentBatchCode ? (
+          <div className="compact-help" style={{ marginBottom: 14 }}>
+            Current working batch: <strong>{currentBatchCode}</strong>. The next cocoa steps are filled automatically with this batch code.
+          </div>
+        ) : null}
         <div className="grid-2">
           <form onSubmit={saveBeansArrival}>
             <h2>Step 1 - Beans Arrival + Moisture</h2>
