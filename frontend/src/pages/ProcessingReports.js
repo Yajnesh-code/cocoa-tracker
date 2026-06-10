@@ -14,7 +14,6 @@ const LABELS = {
   inventory: 'Inventory Report',
   grinding_conching: 'Grinding & Conching Report',
   couverture_packing: 'Couverture Packing Report',
-  melting: 'Melting Report',
   tempering: 'Tempering Report',
   moulding: 'Moulding Report',
   packing: 'Packing Report',

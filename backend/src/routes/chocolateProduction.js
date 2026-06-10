@@ -145,15 +145,10 @@ router.get('/batches', auth, async (req, res) => {
          ni.available_nibs_stock_kg AS source_batch_remaining_nibs_stock_kg,
          ccp.number_of_couverture_packs,
          ccp.total_weight_g AS couverture_total_weight_g,
-         cm.number_of_couverture_packs_used,
-         cm.melting_temperature_c,
          ct.tempering_temperature_c,
          ct.remarks AS tempering_remarks,
          cmw.weight_before_moulding_kg,
          cmw.weight_after_moulding_kg,
-         cc.cooling_start_time,
-         cc.cooling_end_time,
-         cc.ac_temperature_c,
          cd.demoulded_quantity,
          cd.broken_bars,
          cp.total_chocolate_weight_kg,
@@ -165,10 +160,8 @@ router.get('/batches', auth, async (req, res) => {
        LEFT JOIN recipe_master rm ON rm.id = cgc.recipe_id
        LEFT JOIN nibs_inventory ni ON ni.id = cgc.nib_inventory_id
        LEFT JOIN chocolate_couverture_packing ccp ON ccp.production_batch_id = cgc.id
-       LEFT JOIN chocolate_melting cm ON cm.production_batch_id = cgc.id
        LEFT JOIN chocolate_tempering ct ON ct.production_batch_id = cgc.id
        LEFT JOIN chocolate_moulding_weighing cmw ON cmw.production_batch_id = cgc.id
-       LEFT JOIN chocolate_cooling cc ON cc.production_batch_id = cgc.id
        LEFT JOIN chocolate_demoulding cd ON cd.production_batch_id = cgc.id
        LEFT JOIN chocolate_packing cp ON cp.production_batch_id = cgc.id
        LEFT JOIN chocolate_sample_retention csr ON csr.production_batch_id = cgc.id
@@ -306,34 +299,6 @@ router.post('/couverture-packing', auth, async (req, res) => {
   }
 });
 
-router.post('/melting', auth, async (req, res) => {
-  const productionBatchNumber = normalizeBatchNo(req.body.production_batch_number);
-  const numberOfCouverturePacksUsed = toNumber(req.body.number_of_couverture_packs_used);
-  const meltingTemperatureC = toNumber(req.body.melting_temperature_c);
-
-  if (!productionBatchNumber || numberOfCouverturePacksUsed === null || meltingTemperatureC === null) {
-    return res.status(400).json({ error: 'production_batch_number, number_of_couverture_packs_used, and melting_temperature_c are required' });
-  }
-
-  try {
-    const batch = await getProductionBatchByNumber(productionBatchNumber);
-    if (!batch) return res.status(404).json({ error: 'Production batch not found' });
-
-    const result = await upsertSingleStepRecord({
-      table: 'chocolate_melting',
-      productionBatchId: batch.id,
-      payload: {
-        number_of_couverture_packs_used: numberOfCouverturePacksUsed,
-        melting_temperature_c: meltingTemperatureC,
-      },
-      columns: ['number_of_couverture_packs_used', 'melting_temperature_c'],
-    });
-    res.status(201).json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 router.post('/tempering', auth, async (req, res) => {
   const productionBatchNumber = normalizeBatchNo(req.body.production_batch_number);
   const temperingTemperatureC = toNumber(req.body.tempering_temperature_c);
@@ -383,36 +348,6 @@ router.post('/moulding-weighing', auth, async (req, res) => {
         weight_after_moulding_kg: weightAfterMouldingKg,
       },
       columns: ['weight_before_moulding_kg', 'weight_after_moulding_kg'],
-    });
-    res.status(201).json(result);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/cooling', auth, async (req, res) => {
-  const productionBatchNumber = normalizeBatchNo(req.body.production_batch_number);
-  const coolingStartTime = req.body.cooling_start_time;
-  const coolingEndTime = req.body.cooling_end_time || null;
-  const acTemperatureC = toNumber(req.body.ac_temperature_c);
-
-  if (!productionBatchNumber || !coolingStartTime || acTemperatureC === null) {
-    return res.status(400).json({ error: 'production_batch_number, cooling_start_time, and ac_temperature_c are required' });
-  }
-
-  try {
-    const batch = await getProductionBatchByNumber(productionBatchNumber);
-    if (!batch) return res.status(404).json({ error: 'Production batch not found' });
-
-    const result = await upsertSingleStepRecord({
-      table: 'chocolate_cooling',
-      productionBatchId: batch.id,
-      payload: {
-        cooling_start_time: coolingStartTime,
-        cooling_end_time: coolingEndTime,
-        ac_temperature_c: acTemperatureC,
-      },
-      columns: ['cooling_start_time', 'cooling_end_time', 'ac_temperature_c'],
     });
     res.status(201).json(result);
   } catch (err) {

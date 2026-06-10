@@ -81,6 +81,34 @@ async function getCocoaBatchByCode(batchCode) {
   return result.rows[0] || null;
 }
 
+async function nextRoastLotNumber(cocoaBatchId) {
+  const result = await pool.query(
+    `SELECT roast_lot_number
+     FROM cocoa_roast_lots
+     WHERE cocoa_batch_id = $1
+       AND roast_lot_number ~ '^LOT-[0-9]+$'
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`,
+    [cocoaBatchId]
+  );
+
+  const current = result.rows[0]?.roast_lot_number || 'LOT-000';
+  const currentNumber = Number(String(current).replace(/^LOT-/, '')) || 0;
+  return `LOT-${String(currentNumber + 1).padStart(3, '0')}`;
+}
+
+async function getRoastedTotals(cocoaBatchId, excludeRoastLotId = null) {
+  const result = await pool.query(
+    `SELECT COALESCE(SUM(quantity_roasted_kg), 0) AS total_roasted_kg
+     FROM cocoa_roast_lots
+     WHERE cocoa_batch_id = $1
+       AND ($2::int IS NULL OR id <> $2)`,
+    [cocoaBatchId, excludeRoastLotId]
+  );
+
+  return toNumber(result.rows[0]?.total_roasted_kg, 0);
+}
+
 router.get('/batches', auth, async (req, res) => {
   try {
     const result = await pool.query(
@@ -105,7 +133,12 @@ router.get('/batches', auth, async (req, res) => {
            SELECT COALESCE(SUM(crl.quantity_roasted_kg), 0)
            FROM cocoa_roast_lots crl
            WHERE crl.cocoa_batch_id = cpb.id
-         ) AS total_roasted_kg
+         ) AS total_roasted_kg,
+         (
+           SELECT COALESCE(SUM(crl.weight_after_roasting_kg), 0)
+           FROM cocoa_roast_lots crl
+           WHERE crl.cocoa_batch_id = cpb.id
+         ) AS total_weight_after_roasting_kg
        FROM cocoa_processing_batches cpb
        LEFT JOIN cocoa_winnowing cw ON cw.cocoa_batch_id = cpb.id
        LEFT JOIN cocoa_cleaning_nibs ccn ON ccn.cocoa_batch_id = cpb.id
@@ -232,13 +265,12 @@ router.post('/beans-arrival', auth, async (req, res) => {
 
 router.post('/roasting-lots', auth, async (req, res) => {
   const batchCode = String(req.body.batch_code || '').trim().toUpperCase();
-  const roastLotNumber = String(req.body.roast_lot_number || '').trim();
   const quantityRoastedKg = toNumber(req.body.quantity_roasted_kg);
   const weightAfterRoastingKg = toNumber(req.body.weight_after_roasting_kg);
   const moistureAfterRoastingPct = toNumber(req.body.moisture_after_roasting_pct);
 
-  if (!batchCode || !roastLotNumber || quantityRoastedKg === null || weightAfterRoastingKg === null || moistureAfterRoastingPct === null) {
-    return res.status(400).json({ error: 'batch_code, roast_lot_number, quantity_roasted_kg, weight_after_roasting_kg, and moisture_after_roasting_pct are required' });
+  if (!batchCode || quantityRoastedKg === null || weightAfterRoastingKg === null || moistureAfterRoastingPct === null) {
+    return res.status(400).json({ error: 'batch_code, quantity_roasted_kg, weight_after_roasting_kg, and moisture_after_roasting_pct are required' });
   }
 
   if (quantityRoastedKg > 10) {
@@ -248,6 +280,14 @@ router.post('/roasting-lots', auth, async (req, res) => {
   try {
     const cocoaBatch = await getCocoaBatchByCode(batchCode);
     if (!cocoaBatch) return res.status(404).json({ error: 'Create Beans Arrival first for this batch code' });
+    const totalRoastedKg = await getRoastedTotals(cocoaBatch.id);
+    const availableToRoastKg = Number(cocoaBatch.weight_kg || 0) - totalRoastedKg;
+
+    if (quantityRoastedKg > availableToRoastKg) {
+      return res.status(400).json({ error: `Only ${Number(Math.max(availableToRoastKg, 0).toFixed(2))} kg remaining for roasting in this batch` });
+    }
+
+    const roastLotNumber = await nextRoastLotNumber(cocoaBatch.id);
 
     const result = await pool.query(
       `INSERT INTO cocoa_roast_lots (
@@ -259,12 +299,6 @@ router.post('/roasting-lots', auth, async (req, res) => {
          updated_at
        )
        VALUES ($1, $2, $3, $4, $5, NOW())
-       ON CONFLICT (cocoa_batch_id, roast_lot_number)
-       DO UPDATE SET
-         quantity_roasted_kg = EXCLUDED.quantity_roasted_kg,
-         weight_after_roasting_kg = EXCLUDED.weight_after_roasting_kg,
-         moisture_after_roasting_pct = EXCLUDED.moisture_after_roasting_pct,
-         updated_at = NOW()
        RETURNING *`,
       [cocoaBatch.id, roastLotNumber, quantityRoastedKg, weightAfterRoastingKg, moistureAfterRoastingPct]
     );
@@ -290,6 +324,32 @@ router.put('/roasting-lots/:id', auth, async (req, res) => {
   }
 
   try {
+    const roastLotResult = await pool.query(
+      `SELECT id, cocoa_batch_id
+       FROM cocoa_roast_lots
+       WHERE id = $1
+       LIMIT 1`,
+      [req.params.id]
+    );
+    const roastLot = roastLotResult.rows[0];
+    if (!roastLot) return res.status(404).json({ error: 'Roast lot not found' });
+
+    const batchResult = await pool.query(
+      `SELECT id, weight_kg
+       FROM cocoa_processing_batches
+       WHERE id = $1
+       LIMIT 1`,
+      [roastLot.cocoa_batch_id]
+    );
+    const cocoaBatch = batchResult.rows[0];
+    if (!cocoaBatch) return res.status(404).json({ error: 'Cocoa processing batch not found' });
+
+    const otherRoastedKg = await getRoastedTotals(cocoaBatch.id, roastLot.id);
+    const availableToRoastKg = Number(cocoaBatch.weight_kg || 0) - otherRoastedKg;
+    if (quantityRoastedKg > availableToRoastKg) {
+      return res.status(400).json({ error: `Only ${Number(Math.max(availableToRoastKg, 0).toFixed(2))} kg available for this roasting edit` });
+    }
+
     const result = await pool.query(
       `UPDATE cocoa_roast_lots
        SET quantity_roasted_kg = $1,
@@ -300,9 +360,7 @@ router.put('/roasting-lots/:id', auth, async (req, res) => {
        RETURNING *`,
       [quantityRoastedKg, weightAfterRoastingKg, moistureAfterRoastingPct, req.params.id]
     );
-    if (!result.rows[0]) return res.status(404).json({ error: 'Roast lot not found' });
-
-    await pool.query('UPDATE cocoa_processing_batches SET updated_at = NOW() WHERE id = $1', [result.rows[0].cocoa_batch_id]);
+    await pool.query('UPDATE cocoa_processing_batches SET updated_at = NOW() WHERE id = $1', [roastLot.cocoa_batch_id]);
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });

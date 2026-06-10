@@ -18,6 +18,7 @@ export default function CocoaProcessing() {
   const [roastLots, setRoastLots] = useState([]);
   const [roastingBatchLots, setRoastingBatchLots] = useState([]);
   const [selectedBatchCodeForRoast, setSelectedBatchCodeForRoast] = useState('');
+  const [editingRoastId, setEditingRoastId] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,7 +32,6 @@ export default function CocoaProcessing() {
   });
   const [roasting, setRoasting] = useState({
     batch_code: '',
-    roast_lot_number: '',
     quantity_roasted_kg: '',
     weight_after_roasting_kg: '',
     moisture_after_roasting_pct: '',
@@ -87,23 +87,12 @@ export default function CocoaProcessing() {
     const batchCode = String(roasting.batch_code || '').toUpperCase();
     if (!batchCode) {
       setRoastingBatchLots([]);
-      setRoasting((current) => ({ ...current, roast_lot_number: '' }));
       return;
     }
 
     api.get(`/cocoa-processing/roast-lots/${batchCode}`)
-      .then((res) => {
-        const lots = res.data || [];
-        setRoastingBatchLots(lots);
-        setRoasting((current) => ({
-          ...current,
-          roast_lot_number: `LOT-${String(lots.length + 1).padStart(3, '0')}`,
-        }));
-      })
-      .catch(() => {
-        setRoastingBatchLots([]);
-        setRoasting((current) => ({ ...current, roast_lot_number: 'LOT-001' }));
-      });
+      .then((res) => setRoastingBatchLots(res.data || []))
+      .catch(() => setRoastingBatchLots([]));
   }, [roasting.batch_code]);
 
   const batchCodes = useMemo(
@@ -121,18 +110,14 @@ export default function CocoaProcessing() {
     [beansArrival.bag_details]
   );
 
-  const beansArrivalAverageMoisturePct = useMemo(() => {
-    if (beansArrivalTotalWeightKg <= 0) return 0;
-    const moistureTotal = beansArrival.bag_details.reduce(
-      (sum, bag) => sum + (toNumber(bag.weight_kg) * toNumber(bag.moisture_pct)),
-      0
-    );
-    return Number((moistureTotal / beansArrivalTotalWeightKg).toFixed(2));
-  }, [beansArrival.bag_details, beansArrivalTotalWeightKg]);
-
   const selectedRoastingBatch = useMemo(
     () => batches.find((item) => item.batch_code === String(roasting.batch_code || '').toUpperCase()) || null,
     [batches, roasting.batch_code]
+  );
+
+  const selectedWinnowingBatch = useMemo(
+    () => batches.find((item) => item.batch_code === String(winnowing.batch_code || '').toUpperCase()) || null,
+    [batches, winnowing.batch_code]
   );
 
   const remainingToRoastKg = useMemo(() => {
@@ -142,14 +127,20 @@ export default function CocoaProcessing() {
     return Number(Math.max(totalWeight - totalRoasted, 0).toFixed(2));
   }, [selectedRoastingBatch]);
 
-  const roastingQuantityMax = remainingToRoastKg > 0
-    ? Math.min(10, remainingToRoastKg)
-    : 10;
+  const roastingQuantityMax = remainingToRoastKg > 0 ? Math.min(10, remainingToRoastKg) : 10;
 
   const cleaningTotalKg = useMemo(
     () => cleaning.workers_involved.reduce((sum, worker) => sum + toNumber(worker.cleaned_nibs_kg), 0),
     [cleaning.workers_involved]
   );
+
+  useEffect(() => {
+    if (!selectedWinnowingBatch) return;
+    setWinnowing((current) => ({
+      ...current,
+      weight_before_kg: String(toNumber(selectedWinnowingBatch.total_weight_after_roasting_kg).toFixed(2)),
+    }));
+  }, [selectedWinnowingBatch]);
 
   const addBeansArrivalBag = () => {
     const bagWeightKg = Number(beansArrival.bag_weight_kg);
@@ -159,8 +150,6 @@ export default function CocoaProcessing() {
     }
 
     const nextBagNumber = beansArrival.bag_details.length + 1;
-    const bagLabel = `Bag ${nextBagNumber}`;
-
     setBeansArrival((current) => ({
       ...current,
       bag_weight_kg: '',
@@ -168,7 +157,7 @@ export default function CocoaProcessing() {
       bag_details: [
         ...current.bag_details,
         {
-          bag_label: bagLabel,
+          bag_label: `Bag ${nextBagNumber}`,
           weight_kg: bagWeightKg,
           moisture_pct: bagMoisturePct,
         },
@@ -180,6 +169,26 @@ export default function CocoaProcessing() {
     setBeansArrival((current) => ({
       ...current,
       bag_details: current.bag_details.filter((_, index) => index !== indexToRemove),
+    }));
+  };
+
+  const startEditingRoast = (lot) => {
+    setEditingRoastId(lot.id);
+    setRoasting({
+      batch_code: String(selectedBatchCodeForRoast || '').toUpperCase(),
+      quantity_roasted_kg: lot.quantity_roasted_kg,
+      weight_after_roasting_kg: lot.weight_after_roasting_kg,
+      moisture_after_roasting_pct: lot.moisture_after_roasting_pct,
+    });
+  };
+
+  const cancelEditingRoast = () => {
+    setEditingRoastId(null);
+    setRoasting((current) => ({
+      ...current,
+      quantity_roasted_kg: '',
+      weight_after_roasting_kg: '',
+      moisture_after_roasting_pct: '',
     }));
   };
 
@@ -241,7 +250,7 @@ export default function CocoaProcessing() {
         batch_code: batchCode,
         bag_details: beansArrival.bag_details,
       });
-      setSuccess('Beans Arrival saved with bag-wise totals');
+      setSuccess('Beans Arrival saved with bag-wise details');
       const savedBatchCode = String(response.data?.batch_code || batchCode).toUpperCase();
       setBeansArrival({
         batch_code: '',
@@ -269,18 +278,29 @@ export default function CocoaProcessing() {
     setLoading(true);
     try {
       const batchCode = String(roasting.batch_code || '').toUpperCase();
-      await api.post('/cocoa-processing/roasting-lots', {
-        ...roasting,
-        batch_code: batchCode,
-      });
-      setSuccess('Roasting entry saved');
+      if (editingRoastId) {
+        await api.put(`/cocoa-processing/roasting-lots/${editingRoastId}`, {
+          quantity_roasted_kg: roasting.quantity_roasted_kg,
+          weight_after_roasting_kg: roasting.weight_after_roasting_kg,
+          moisture_after_roasting_pct: roasting.moisture_after_roasting_pct,
+        });
+        setSuccess('Roasting entry updated');
+      } else {
+        await api.post('/cocoa-processing/roasting-lots', {
+          batch_code: batchCode,
+          quantity_roasted_kg: roasting.quantity_roasted_kg,
+          weight_after_roasting_kg: roasting.weight_after_roasting_kg,
+          moisture_after_roasting_pct: roasting.moisture_after_roasting_pct,
+        });
+        setSuccess('Roasting entry saved');
+      }
       setRoasting({
         batch_code: batchCode,
-        roast_lot_number: '',
         quantity_roasted_kg: '',
         weight_after_roasting_kg: '',
         moisture_after_roasting_pct: '',
       });
+      setEditingRoastId(null);
       setWinnowing((current) => ({ ...current, batch_code: batchCode }));
       setCleaning((current) => ({ ...current, batch_code: batchCode }));
       setNibsPacking((current) => ({ ...current, batch_code: batchCode }));
@@ -372,7 +392,7 @@ export default function CocoaProcessing() {
     <div>
       <div className="page-header">
         <h1>Cocoa Processing</h1>
-        <p>Use simple bag-wise entry, automatic totals, and worker-wise cleaned nib tracking for a smoother factory workflow.</p>
+        <p>Use simple bag-wise entry, repeated roasting saves, automatic roasting totals, and worker-wise cleaned nib tracking.</p>
       </div>
 
       <div className="card">
@@ -401,7 +421,7 @@ export default function CocoaProcessing() {
               <div className="soft-panel-title">
                 <div>
                   <h3>Add Bag</h3>
-                  <p>Enter each bag weight and moisture. The system will total everything for you.</p>
+                  <p>Enter bag weight and moisture. The system keeps each bag moisture detail separately.</p>
                 </div>
               </div>
               <div className="form-group">
@@ -472,10 +492,6 @@ export default function CocoaProcessing() {
                 <div className="stat-chip-label">Total Weight</div>
                 <div className="stat-chip-value">{beansArrivalTotalWeightKg.toFixed(2)} kg</div>
               </div>
-              <div className="stat-chip">
-                <div className="stat-chip-label">Average Moisture</div>
-                <div className="stat-chip-value">{beansArrivalAverageMoisturePct.toFixed(2)}%</div>
-              </div>
             </div>
 
             <button className="btn btn-primary" type="submit" disabled={loading || beansArrival.bag_details.length === 0}>
@@ -483,81 +499,130 @@ export default function CocoaProcessing() {
             </button>
           </form>
 
-          <form onSubmit={saveRoastLot}>
-            <h2>Step 2 - Roasting</h2>
-            <div className="form-group">
-              <label>Batch Code *</label>
-              <input
-                list="processing-batch-codes"
-                value={roasting.batch_code}
-                onChange={(e) => setRoasting({ ...roasting, batch_code: e.target.value.toUpperCase() })}
-                placeholder="Select or type processing batch"
-                required
-              />
-              <datalist id="processing-batch-codes">
-                {batchCodes.map((code) => (
-                  <option key={code} value={code} />
-                ))}
-              </datalist>
-            </div>
-
-            <div className="stat-chip-grid" style={{ marginBottom: 16 }}>
-              <div className="stat-chip">
-                <div className="stat-chip-label">Beans Arrival</div>
-                <div className="stat-chip-value">{selectedRoastingBatch ? `${toNumber(selectedRoastingBatch.weight_kg).toFixed(2)} kg` : '0.00 kg'}</div>
+          <div>
+            <form onSubmit={saveRoastLot}>
+              <h2>Step 2 - Roasting</h2>
+              <div className="form-group">
+                <label>Batch Code *</label>
+                <input
+                  list="processing-batch-codes"
+                  value={roasting.batch_code}
+                  onChange={(e) => {
+                    const batchCode = e.target.value.toUpperCase();
+                    setRoasting({
+                      batch_code: batchCode,
+                      quantity_roasted_kg: '',
+                      weight_after_roasting_kg: '',
+                      moisture_after_roasting_pct: '',
+                    });
+                    setSelectedBatchCodeForRoast(batchCode);
+                    setEditingRoastId(null);
+                  }}
+                  placeholder="Select or type processing batch"
+                  required
+                />
+                <datalist id="processing-batch-codes">
+                  {batchCodes.map((code) => (
+                    <option key={code} value={code} />
+                  ))}
+                </datalist>
               </div>
-              <div className="stat-chip">
-                <div className="stat-chip-label">Already Roasted</div>
-                <div className="stat-chip-value">{selectedRoastingBatch ? `${toNumber(selectedRoastingBatch.total_roasted_kg).toFixed(2)} kg` : '0.00 kg'}</div>
-              </div>
-              <div className="stat-chip">
-                <div className="stat-chip-label">Remaining</div>
-                <div className="stat-chip-value">{remainingToRoastKg.toFixed(2)} kg</div>
-              </div>
-            </div>
 
-            <div className="compact-help" style={{ marginBottom: 12 }}>
-              Roasting entry number is created automatically in the background. Staff only need to enter roasting values.
-            </div>
+              <div className="stat-chip-grid" style={{ marginBottom: 16 }}>
+                <div className="stat-chip">
+                  <div className="stat-chip-label">Beans Arrival</div>
+                  <div className="stat-chip-value">{selectedRoastingBatch ? `${toNumber(selectedRoastingBatch.weight_kg).toFixed(2)} kg` : '0.00 kg'}</div>
+                </div>
+                <div className="stat-chip">
+                  <div className="stat-chip-label">Already Roasted</div>
+                  <div className="stat-chip-value">{selectedRoastingBatch ? `${toNumber(selectedRoastingBatch.total_roasted_kg).toFixed(2)} kg` : '0.00 kg'}</div>
+                </div>
+                <div className="stat-chip">
+                  <div className="stat-chip-label">Remaining</div>
+                  <div className="stat-chip-value">{remainingToRoastKg.toFixed(2)} kg</div>
+                </div>
+              </div>
 
-            <div className="form-group">
-              <label>Quantity Roasted (kg) *</label>
-              <input
-                type="number"
-                step="0.01"
-                max={roastingQuantityMax}
-                value={roasting.quantity_roasted_kg}
-                onChange={(e) => setRoasting({ ...roasting, quantity_roasted_kg: e.target.value })}
-                required
-              />
+              <div className="compact-help" style={{ marginBottom: 12 }}>
+                Each save creates a new roasting entry for this batch. Each single entry can be up to 10 kg.
+              </div>
+
+              <div className="form-group">
+                <label>Quantity Roasted (kg) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  max={roastingQuantityMax}
+                  value={roasting.quantity_roasted_kg}
+                  onChange={(e) => setRoasting({ ...roasting, quantity_roasted_kg: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Weight After Roasting *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={roasting.weight_after_roasting_kg}
+                  onChange={(e) => setRoasting({ ...roasting, weight_after_roasting_kg: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label>Moisture After Roasting (%) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={roasting.moisture_after_roasting_pct}
+                  onChange={(e) => setRoasting({ ...roasting, moisture_after_roasting_pct: e.target.value })}
+                  required
+                />
+              </div>
+              <button className="btn btn-primary" type="submit" disabled={loading}>
+                {loading ? 'Saving...' : editingRoastId ? 'Update Roasting Entry' : 'Save Roasting Entry'}
+              </button>
+              {editingRoastId ? (
+                <button className="btn btn-secondary" type="button" onClick={cancelEditingRoast} style={{ marginLeft: 8 }}>
+                  Cancel Edit
+                </button>
+              ) : null}
+            </form>
+
+            <div className="table-wrap" style={{ marginTop: 18 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Entry</th>
+                    <th>Qty Roasted</th>
+                    <th>Weight After</th>
+                    <th>Moisture After</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roastingBatchLots.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} style={{ color: 'var(--text-muted)' }}>No roasting entries yet</td>
+                    </tr>
+                  ) : (
+                    roastingBatchLots.map((lot) => (
+                      <tr key={lot.id}>
+                        <td>{lot.roast_lot_number}</td>
+                        <td>{Number(lot.quantity_roasted_kg).toFixed(2)}</td>
+                        <td>{Number(lot.weight_after_roasting_kg).toFixed(2)}</td>
+                        <td>{Number(lot.moisture_after_roasting_pct).toFixed(2)}</td>
+                        <td>
+                          <button className="btn btn-sm btn-secondary" type="button" onClick={() => startEditingRoast(lot)}>
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
-            <div className="form-group">
-              <label>Weight After Roasting *</label>
-              <input
-                type="number"
-                step="0.01"
-                value={roasting.weight_after_roasting_kg}
-                onChange={(e) => setRoasting({ ...roasting, weight_after_roasting_kg: e.target.value })}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>Moisture After Roasting (%) *</label>
-              <input
-                type="number"
-                step="0.01"
-                value={roasting.moisture_after_roasting_pct}
-                onChange={(e) => setRoasting({ ...roasting, moisture_after_roasting_pct: e.target.value })}
-                required
-              />
-            </div>
-            <button className="btn btn-primary" type="submit" disabled={loading}>
-              {loading ? 'Saving...' : 'Save Roasting'}
-            </button>
-            <div className="compact-help" style={{ marginTop: 8 }}>
-              Existing roasting entries for this batch: {roastingBatchLots.length}
-            </div>
-          </form>
+          </div>
         </div>
       </div>
 
@@ -575,9 +640,12 @@ export default function CocoaProcessing() {
                 required
               />
             </div>
+            <div className="compact-help" style={{ marginBottom: 12 }}>
+              Weight before winnowing is filled automatically from the total weight after roasting for this batch.
+            </div>
             <div className="form-group">
               <label>Weight Before Winnowing *</label>
-              <input type="number" step="0.01" value={winnowing.weight_before_kg} onChange={(e) => setWinnowing({ ...winnowing, weight_before_kg: e.target.value })} required />
+              <input type="number" step="0.01" value={winnowing.weight_before_kg} readOnly required />
             </div>
             <div className="form-group">
               <label>Weight After Winnowing *</label>

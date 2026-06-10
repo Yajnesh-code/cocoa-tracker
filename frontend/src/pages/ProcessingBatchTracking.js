@@ -69,7 +69,7 @@ export default function ProcessingBatchTracking() {
             <div className="timeline-item">
               <h4>Beans Arrival</h4>
               <p>
-                Weight: {formatNum(data.beans_arrival.weight_kg)} kg | Moisture: {formatNum(data.beans_arrival.moisture_pct)}%
+                Total Weight: {formatNum(data.beans_arrival.weight_kg)} kg
               </p>
               <p>
                 Bags: {Array.isArray(data.beans_arrival.bag_details) ? data.beans_arrival.bag_details.length : 0}

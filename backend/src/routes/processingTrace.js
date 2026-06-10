@@ -68,15 +68,10 @@ router.get('/:batch_code', auth, async (req, res) => {
            rm.recipe_name,
            ccp.number_of_couverture_packs,
            ccp.total_weight_g AS couverture_total_weight_g,
-           cm.number_of_couverture_packs_used,
-           cm.melting_temperature_c,
            ct.tempering_temperature_c,
            ct.remarks AS tempering_remarks,
            cmw.weight_before_moulding_kg,
            cmw.weight_after_moulding_kg,
-           cc.cooling_start_time,
-           cc.cooling_end_time,
-           cc.ac_temperature_c,
            cd.demoulded_quantity,
            cd.broken_bars,
            cp.total_chocolate_weight_kg,
@@ -87,10 +82,8 @@ router.get('/:batch_code', auth, async (req, res) => {
          FROM chocolate_grinding_conching cgc
          LEFT JOIN recipe_master rm ON rm.id = cgc.recipe_id
          LEFT JOIN chocolate_couverture_packing ccp ON ccp.production_batch_id = cgc.id
-         LEFT JOIN chocolate_melting cm ON cm.production_batch_id = cgc.id
          LEFT JOIN chocolate_tempering ct ON ct.production_batch_id = cgc.id
          LEFT JOIN chocolate_moulding_weighing cmw ON cmw.production_batch_id = cgc.id
-         LEFT JOIN chocolate_cooling cc ON cc.production_batch_id = cgc.id
          LEFT JOIN chocolate_demoulding cd ON cd.production_batch_id = cgc.id
          LEFT JOIN chocolate_packing cp ON cp.production_batch_id = cgc.id
          LEFT JOIN chocolate_sample_retention csr ON csr.production_batch_id = cgc.id

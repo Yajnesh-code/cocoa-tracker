@@ -5,7 +5,11 @@ const auth = require('../middleware/auth');
 const router = express.Router();
 
 function escapeHtml(value) {
-  return String(value ?? '')
+  const normalized = value && typeof value === 'object'
+    ? JSON.stringify(value)
+    : String(value ?? '');
+
+  return normalized
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -51,7 +55,7 @@ function buildTableHtml(title, rows) {
 const cocoaReports = {
   batch: {
     title: 'Cocoa Processing Batch Report',
-    query: `SELECT batch_code, weight_kg, moisture_pct, created_at
+    query: `SELECT batch_code, weight_kg, bag_details, created_at
             FROM cocoa_processing_batches
             ORDER BY created_at DESC`,
   },
@@ -105,13 +109,6 @@ const chocolateReports = {
             FROM chocolate_couverture_packing ccp
             JOIN chocolate_grinding_conching cgc ON cgc.id = ccp.production_batch_id
             ORDER BY ccp.created_at DESC`,
-  },
-  melting: {
-    title: 'Melting Report',
-    query: `SELECT cgc.production_batch_number, cm.number_of_couverture_packs_used, cm.melting_temperature_c, cm.created_at
-            FROM chocolate_melting cm
-            JOIN chocolate_grinding_conching cgc ON cgc.id = cm.production_batch_id
-            ORDER BY cm.created_at DESC`,
   },
   tempering: {
     title: 'Tempering Report',
