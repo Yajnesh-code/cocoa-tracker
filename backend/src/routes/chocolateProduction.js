@@ -4,8 +4,8 @@ const auth = require('../middleware/auth');
 
 const router = express.Router();
 
-const COUVERTURE_PACK_WEIGHT_G = 500;
 const CHOCOLATE_BAR_WEIGHT_G = 50;
+const ALLOWED_COUVERTURE_PACK_SIZES_G = [250, 500];
 
 function toNumber(value, fallback = null) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -147,6 +147,7 @@ router.get('/batches', auth, async (req, res) => {
          cgc.*,
          rm.recipe_name,
          ni.available_nibs_stock_kg AS source_batch_remaining_nibs_stock_kg,
+         ccp.pack_size_g,
          ccp.number_of_couverture_packs,
          ccp.total_weight_g AS couverture_total_weight_g,
          ct.tempering_temperature_c,
@@ -403,25 +404,31 @@ router.put('/grinding-conching/:production_batch_number', auth, async (req, res)
 
 router.post('/couverture-packing', auth, async (req, res) => {
   const productionBatchNumber = normalizeBatchNo(req.body.production_batch_number);
+  const packSizeG = toNumber(req.body.pack_size_g, 500);
   const numberOfCouverturePacks = toNumber(req.body.number_of_couverture_packs);
 
   if (!productionBatchNumber || numberOfCouverturePacks === null) {
     return res.status(400).json({ error: 'production_batch_number and number_of_couverture_packs are required' });
   }
 
+  if (!ALLOWED_COUVERTURE_PACK_SIZES_G.includes(packSizeG)) {
+    return res.status(400).json({ error: 'pack_size_g must be 250 or 500' });
+  }
+
   try {
     const batch = await getProductionBatchByNumber(productionBatchNumber);
     if (!batch) return res.status(404).json({ error: 'Production batch not found' });
 
-    const totalWeightG = Math.round(numberOfCouverturePacks * COUVERTURE_PACK_WEIGHT_G);
+    const totalWeightG = Math.round(numberOfCouverturePacks * packSizeG);
     const result = await upsertSingleStepRecord({
       table: 'chocolate_couverture_packing',
       productionBatchId: batch.id,
       payload: {
+        pack_size_g: packSizeG,
         number_of_couverture_packs: numberOfCouverturePacks,
         total_weight_g: totalWeightG,
       },
-      columns: ['number_of_couverture_packs', 'total_weight_g'],
+      columns: ['pack_size_g', 'number_of_couverture_packs', 'total_weight_g'],
     });
 
     res.status(201).json(result);

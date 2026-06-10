@@ -109,6 +109,58 @@ async function getRoastedTotals(cocoaBatchId, excludeRoastLotId = null) {
   return toNumber(result.rows[0]?.total_roasted_kg, 0);
 }
 
+async function getChocolateNibsUsedKg(batchCode) {
+  const result = await pool.query(
+    `SELECT COALESCE(SUM(nibs_quantity_used_kg), 0) AS total_used_kg
+     FROM chocolate_grinding_conching
+     WHERE source_batch_code = $1`,
+    [batchCode]
+  );
+
+  return toNumber(result.rows[0]?.total_used_kg, 0);
+}
+
+async function recomputeNibsInventory(batchCode, cocoaBatchId) {
+  const [cleaningResult, packingResult] = await Promise.all([
+    pool.query(
+      `SELECT weight_after_kg
+       FROM cocoa_cleaning_nibs
+       WHERE cocoa_batch_id = $1
+       LIMIT 1`,
+      [cocoaBatchId]
+    ),
+    pool.query(
+      `SELECT total_nibs_weight_kg
+       FROM cocoa_nibs_packing
+       WHERE cocoa_batch_id = $1
+       LIMIT 1`,
+      [cocoaBatchId]
+    ),
+  ]);
+
+  const cleanedNibsKg = toNumber(cleaningResult.rows[0]?.weight_after_kg);
+  const packedNibsKg = toNumber(packingResult.rows[0]?.total_nibs_weight_kg);
+  const baseStockKg = cleanedNibsKg !== null ? cleanedNibsKg : (packedNibsKg !== null ? packedNibsKg : 0);
+  const totalUsedKg = await getChocolateNibsUsedKg(batchCode);
+  const availableStockKg = Number(Math.max(baseStockKg - totalUsedKg, 0).toFixed(2));
+  const inventoryStatus = availableStockKg > 0 ? 'Active' : 'Fully Consumed';
+
+  const result = await pool.query(
+    `INSERT INTO nibs_inventory (cocoa_batch_id, batch_code, available_nibs_stock_kg, status, updated_at)
+     VALUES ($1, $2, $3, $4, NOW())
+     ON CONFLICT (cocoa_batch_id)
+     DO UPDATE SET
+       batch_code = EXCLUDED.batch_code,
+       available_nibs_stock_kg = EXCLUDED.available_nibs_stock_kg,
+       status = EXCLUDED.status,
+       updated_at = NOW()
+     RETURNING *`,
+    [cocoaBatchId, batchCode, availableStockKg, inventoryStatus]
+  );
+
+  return result.rows[0];
+}
+
 router.get('/batches', auth, async (req, res) => {
   try {
     const result = await pool.query(
@@ -442,8 +494,12 @@ router.post('/cleaning-nibs', auth, async (req, res) => {
       [cocoaBatch.id, weightBeforeKg, weightAfterKg, JSON.stringify(workersInvolved), remarks]
     );
 
+    const inventory = await recomputeNibsInventory(batchCode, cocoaBatch.id);
     await pool.query('UPDATE cocoa_processing_batches SET updated_at = NOW() WHERE id = $1', [cocoaBatch.id]);
-    res.status(201).json(result.rows[0]);
+    res.status(201).json({
+      cleaning: result.rows[0],
+      inventory,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -461,6 +517,21 @@ router.post('/nibs-packing', auth, async (req, res) => {
   try {
     const cocoaBatch = await getCocoaBatchByCode(batchCode);
     if (!cocoaBatch) return res.status(404).json({ error: 'Create Beans Arrival first for this batch code' });
+    const cleaningResult = await pool.query(
+      `SELECT weight_after_kg
+       FROM cocoa_cleaning_nibs
+       WHERE cocoa_batch_id = $1
+       LIMIT 1`,
+      [cocoaBatch.id]
+    );
+    const cleanedNibsKg = toNumber(cleaningResult.rows[0]?.weight_after_kg);
+    if (cleanedNibsKg !== null) {
+      const totalUsedKg = await getChocolateNibsUsedKg(batchCode);
+      const remainingAvailableKg = Number(Math.max(cleanedNibsKg - totalUsedKg, 0).toFixed(2));
+      if (totalNibsWeightKg > remainingAvailableKg) {
+        return res.status(400).json({ error: `Only ${remainingAvailableKg} kg currently available to pack for this batch` });
+      }
+    }
 
     await pool.query('BEGIN');
 
@@ -477,25 +548,14 @@ router.post('/nibs-packing', auth, async (req, res) => {
       [cocoaBatch.id, totalNibsWeightKg, numberOfBags]
     );
 
-    const inventoryStatus = totalNibsWeightKg > 0 ? 'Active' : 'Fully Consumed';
-    const inventoryResult = await pool.query(
-      `INSERT INTO nibs_inventory (cocoa_batch_id, batch_code, available_nibs_stock_kg, status, updated_at)
-       VALUES ($1, $2, $3, $4, NOW())
-       ON CONFLICT (cocoa_batch_id)
-       DO UPDATE SET
-         available_nibs_stock_kg = EXCLUDED.available_nibs_stock_kg,
-         status = EXCLUDED.status,
-         updated_at = NOW()
-       RETURNING *`,
-      [cocoaBatch.id, batchCode, totalNibsWeightKg, inventoryStatus]
-    );
+    const inventoryResult = await recomputeNibsInventory(batchCode, cocoaBatch.id);
 
     await pool.query('UPDATE cocoa_processing_batches SET updated_at = NOW() WHERE id = $1', [cocoaBatch.id]);
     await pool.query('COMMIT');
 
     res.status(201).json({
       packing: packingResult.rows[0],
-      inventory: inventoryResult.rows[0],
+      inventory: inventoryResult,
     });
   } catch (err) {
     try {

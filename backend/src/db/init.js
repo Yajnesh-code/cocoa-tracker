@@ -288,11 +288,13 @@ async function initDB() {
       CREATE TABLE IF NOT EXISTS chocolate_couverture_packing (
         id SERIAL PRIMARY KEY,
         production_batch_id INTEGER UNIQUE NOT NULL REFERENCES chocolate_grinding_conching(id) ON DELETE CASCADE,
+        pack_size_g INTEGER NOT NULL DEFAULT 500,
         number_of_couverture_packs INTEGER NOT NULL,
         total_weight_g INTEGER NOT NULL,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
+      ALTER TABLE chocolate_couverture_packing ADD COLUMN IF NOT EXISTS pack_size_g INTEGER NOT NULL DEFAULT 500;
 
       -- CHOCOLATE PRODUCTION: STEP 3
       CREATE TABLE IF NOT EXISTS chocolate_melting (

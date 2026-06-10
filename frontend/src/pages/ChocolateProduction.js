@@ -27,7 +27,6 @@ function selectBatchOptions(batches) {
 }
 
 export default function ChocolateProduction() {
-  const [inventory, setInventory] = useState([]);
   const [recipes, setRecipes] = useState([]);
   const [batches, setBatches] = useState([]);
   const [error, setError] = useState('');
@@ -44,7 +43,7 @@ export default function ChocolateProduction() {
     power_failure: false,
     remarks: '',
   });
-  const [step2, setStep2] = useState({ production_batch_number: '', number_of_couverture_packs: '' });
+  const [step2, setStep2] = useState({ production_batch_number: '', pack_size_g: '500', number_of_couverture_packs: '' });
   const [step3, setStep3] = useState({ production_batch_number: '', tempering_temperature_c: '', remarks: '' });
   const [step4, setStep4] = useState({ production_batch_number: '', weight_before_moulding_kg: '', weight_after_moulding_kg: '' });
   const [step5, setStep5] = useState({ production_batch_number: '', demoulded_quantity: '', broken_bars: '' });
@@ -53,12 +52,10 @@ export default function ChocolateProduction() {
 
   const refresh = async () => {
     try {
-      const [inventoryRes, recipesRes, batchesRes] = await Promise.all([
-        api.get('/cocoa-processing/inventory'),
+      const [recipesRes, batchesRes] = await Promise.all([
         api.get('/chocolate-production/recipes'),
         api.get('/chocolate-production/batches'),
       ]);
-      setInventory(inventoryRes.data || []);
       setRecipes(recipesRes.data || []);
       setBatches(batchesRes.data || []);
     } catch (err) {
@@ -81,7 +78,7 @@ export default function ChocolateProduction() {
     [batches]
   );
 
-  const couvertureTotalWeightG = Math.round(Number(step2.number_of_couverture_packs || 0) * 500);
+  const couvertureTotalWeightG = Math.round(Number(step2.number_of_couverture_packs || 0) * Number(step2.pack_size_g || 500));
   const packedBarsPreview = Math.floor((Number(step6.total_chocolate_weight_kg || 0) * 1000) / 50);
 
   const fillNextSteps = (productionBatchNumber) => {
@@ -152,6 +149,7 @@ export default function ChocolateProduction() {
     });
     setStep2({
       production_batch_number: batch.production_batch_number,
+      pack_size_g: String(batch.pack_size_g || 500),
       number_of_couverture_packs: batch.number_of_couverture_packs ?? '',
     });
     setStep3({
@@ -191,7 +189,7 @@ export default function ChocolateProduction() {
       power_failure: false,
       remarks: '',
     });
-    setStep2({ production_batch_number: '', number_of_couverture_packs: '' });
+    setStep2({ production_batch_number: '', pack_size_g: '500', number_of_couverture_packs: '' });
     setStep3({ production_batch_number: '', tempering_temperature_c: '', remarks: '' });
     setStep4({ production_batch_number: '', weight_before_moulding_kg: '', weight_after_moulding_kg: '' });
     setStep5({ production_batch_number: '', demoulded_quantity: '', broken_bars: '' });
@@ -374,7 +372,7 @@ export default function ChocolateProduction() {
               'couverture-packing',
               step2,
               selectedStep2Batch?.number_of_couverture_packs != null ? 'Couverture Packing updated' : 'Couverture Packing saved',
-              () => setStep2({ production_batch_number: step2.production_batch_number, number_of_couverture_packs: '' })
+              () => setStep2({ production_batch_number: step2.production_batch_number, pack_size_g: step2.pack_size_g, number_of_couverture_packs: '' })
             );
           }}>
             <h2>Step 2 - Couverture Packing</h2>
@@ -385,10 +383,18 @@ export default function ChocolateProduction() {
                 const batch = batches.find((item) => item.production_batch_number === batchNo);
                 setStep2({
                   production_batch_number: batchNo,
+                  pack_size_g: String(batch?.pack_size_g || 500),
                   number_of_couverture_packs: batch?.number_of_couverture_packs ?? '',
                 });
               }} required>
                 {selectBatchOptions(productionBatchOptions)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Pack Size *</label>
+              <select value={step2.pack_size_g} onChange={(e) => setStep2({ ...step2, pack_size_g: e.target.value })} required>
+                <option value="500">500 g</option>
+                <option value="250">250 g</option>
               </select>
             </div>
             <div className="form-group">

@@ -148,7 +148,11 @@ export default function CocoaProcessing() {
 
   const loadBeansArrivalBatch = (batchCode) => {
     const batch = batches.find((item) => item.batch_code === String(batchCode || '').toUpperCase());
-    if (!batch) return;
+    if (!batch) {
+      setError('Beans Arrival batch not found');
+      return;
+    }
+    setError('');
     setBeansArrival({
       batch_code: batch.batch_code,
       bag_weight_kg: '',
@@ -186,7 +190,11 @@ export default function CocoaProcessing() {
 
   const loadWinnowingBatch = (batchCode) => {
     const batch = batches.find((item) => item.batch_code === String(batchCode || '').toUpperCase());
-    if (!batch) return;
+    if (!batch) {
+      setError('Winnowing batch not found');
+      return;
+    }
+    setError('');
     setWinnowing({
       batch_code: batch.batch_code,
       weight_before_kg: String(toNumber(batch.total_weight_after_roasting_kg).toFixed(2)),
@@ -200,7 +208,11 @@ export default function CocoaProcessing() {
 
   const loadCleaningBatch = (batchCode) => {
     const batch = batches.find((item) => item.batch_code === String(batchCode || '').toUpperCase());
-    if (!batch) return;
+    if (!batch) {
+      setError('Cleaning batch not found');
+      return;
+    }
+    setError('');
     setCleaning({
       batch_code: batch.batch_code,
       weight_before_kg: batch.cleaning_weight_before_kg ?? '',
@@ -224,7 +236,11 @@ export default function CocoaProcessing() {
 
   const loadPackingBatch = (batchCode) => {
     const batch = batches.find((item) => item.batch_code === String(batchCode || '').toUpperCase());
-    if (!batch) return;
+    if (!batch) {
+      setError('Nibs packing batch not found');
+      return;
+    }
+    setError('');
     setNibsPacking({
       batch_code: batch.batch_code,
       total_nibs_weight_kg: batch.total_nibs_weight_kg ?? '',
@@ -500,7 +516,7 @@ export default function CocoaProcessing() {
               />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <button className="btn btn-secondary" type="button" onClick={() => loadBeansArrivalBatch(beansArrival.batch_code)} disabled={!selectedBeansArrivalBatch}>
+              <button className="btn btn-secondary" type="button" onClick={() => loadBeansArrivalBatch(beansArrival.batch_code)}>
                 Load Existing
               </button>
               <button className="btn btn-secondary" type="button" onClick={clearBeansArrival} style={{ marginLeft: 8 }}>
@@ -715,7 +731,7 @@ export default function CocoaProcessing() {
               />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <button className="btn btn-secondary" type="button" onClick={() => loadWinnowingBatch(winnowing.batch_code)} disabled={!selectedWinnowingBatch}>
+              <button className="btn btn-secondary" type="button" onClick={() => loadWinnowingBatch(winnowing.batch_code)}>
                 Load Existing
               </button>
               <button className="btn btn-secondary" type="button" onClick={clearWinnowing} style={{ marginLeft: 8 }}>
@@ -764,7 +780,7 @@ export default function CocoaProcessing() {
               />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <button className="btn btn-secondary" type="button" onClick={() => loadCleaningBatch(cleaning.batch_code)} disabled={!selectedCleaningBatch}>
+              <button className="btn btn-secondary" type="button" onClick={() => loadCleaningBatch(cleaning.batch_code)}>
                 Load Existing
               </button>
               <button className="btn btn-secondary" type="button" onClick={clearCleaning} style={{ marginLeft: 8 }}>
@@ -859,7 +875,7 @@ export default function CocoaProcessing() {
               />
             </div>
             <div style={{ marginBottom: 14 }}>
-              <button className="btn btn-secondary" type="button" onClick={() => loadPackingBatch(nibsPacking.batch_code)} disabled={!selectedPackingBatch}>
+              <button className="btn btn-secondary" type="button" onClick={() => loadPackingBatch(nibsPacking.batch_code)}>
                 Load Existing
               </button>
               <button className="btn btn-secondary" type="button" onClick={clearPacking} style={{ marginLeft: 8 }}>
