@@ -25,7 +25,6 @@ export default function CocoaProcessing() {
 
   const [beansArrival, setBeansArrival] = useState({
     batch_code: '',
-    bag_label: '',
     bag_weight_kg: '',
     bag_moisture_pct: '',
     bag_details: [],
@@ -160,11 +159,10 @@ export default function CocoaProcessing() {
     }
 
     const nextBagNumber = beansArrival.bag_details.length + 1;
-    const bagLabel = String(beansArrival.bag_label || `Bag ${nextBagNumber}`).trim() || `Bag ${nextBagNumber}`;
+    const bagLabel = `Bag ${nextBagNumber}`;
 
     setBeansArrival((current) => ({
       ...current,
-      bag_label: '',
       bag_weight_kg: '',
       bag_moisture_pct: '',
       bag_details: [
@@ -247,7 +245,6 @@ export default function CocoaProcessing() {
       const savedBatchCode = String(response.data?.batch_code || batchCode).toUpperCase();
       setBeansArrival({
         batch_code: '',
-        bag_label: '',
         bag_weight_kg: '',
         bag_moisture_pct: '',
         bag_details: [],
@@ -408,14 +405,6 @@ export default function CocoaProcessing() {
                 </div>
               </div>
               <div className="form-group">
-                <label>Bag Name</label>
-                <input
-                  value={beansArrival.bag_label}
-                  onChange={(e) => setBeansArrival({ ...beansArrival, bag_label: e.target.value })}
-                  placeholder={`Bag ${beansArrival.bag_details.length + 1}`}
-                />
-              </div>
-              <div className="form-group">
                 <label>Bag Weight (kg) *</label>
                 <input
                   type="number"
@@ -432,6 +421,9 @@ export default function CocoaProcessing() {
                   value={beansArrival.bag_moisture_pct}
                   onChange={(e) => setBeansArrival({ ...beansArrival, bag_moisture_pct: e.target.value })}
                 />
+              </div>
+              <div className="compact-help" style={{ marginBottom: 8 }}>
+                Bag names are created automatically as `Bag 1`, `Bag 2`, `Bag 3`...
               </div>
               <button className="btn btn-secondary" type="button" onClick={addBeansArrivalBag}>
                 Add Bag
