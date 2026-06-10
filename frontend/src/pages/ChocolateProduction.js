@@ -81,14 +81,6 @@ export default function ChocolateProduction() {
     [batches]
   );
 
-  const selectedInventory = useMemo(
-    () => inventory.find((item) => item.batch_code === step1.source_batch_code),
-    [inventory, step1.source_batch_code]
-  );
-
-  const availableNibsStockKg = Number(selectedInventory?.available_nibs_stock_kg || 0);
-  const nibsQuantityUsedKg = Number(step1.nibs_quantity_used_kg || 0);
-  const remainingNibsStockKg = Math.max(availableNibsStockKg - nibsQuantityUsedKg, 0);
   const couvertureTotalWeightG = Math.round(Number(step2.number_of_couverture_packs || 0) * 500);
   const packedBarsPreview = Math.floor((Number(step6.total_chocolate_weight_kg || 0) * 1000) / 50);
 
@@ -286,20 +278,12 @@ export default function ChocolateProduction() {
             </div>
             <div className="form-group">
               <label>Source Batch Code *</label>
-              <select value={step1.source_batch_code} onChange={(e) => setStep1({ ...step1, source_batch_code: e.target.value })} required>
-                <option value="">Select source batch...</option>
-                {inventory
-                  .filter((item) => Number(item.available_nibs_stock_kg || 0) > 0 || item.batch_code === step1.source_batch_code)
-                  .map((item) => (
-                    <option key={item.id} value={item.batch_code}>
-                      {item.batch_code} - {Number(item.available_nibs_stock_kg || 0).toFixed(2)} kg ({item.status})
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Available Nibs Stock</label>
-              <input value={step1.source_batch_code ? `${availableNibsStockKg.toFixed(2)} kg` : ''} readOnly placeholder="Auto-filled from inventory" />
+              <input
+                value={step1.source_batch_code}
+                onChange={(e) => setStep1({ ...step1, source_batch_code: e.target.value.toUpperCase() })}
+                placeholder="Type source batch code"
+                required
+              />
             </div>
             <div className="form-group">
               <label>Recipe Name *</label>
@@ -319,10 +303,6 @@ export default function ChocolateProduction() {
                 onChange={(e) => setStep1({ ...step1, nibs_quantity_used_kg: e.target.value })}
                 required
               />
-            </div>
-            <div className="form-group">
-              <label>Remaining Nibs Stock</label>
-              <input value={step1.source_batch_code ? `${remainingNibsStockKg.toFixed(2)} kg` : ''} readOnly placeholder="Auto-calculated after usage" />
             </div>
             <div className="form-group">
               <label>Start Time *</label>

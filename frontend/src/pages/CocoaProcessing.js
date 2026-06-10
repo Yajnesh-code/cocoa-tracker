@@ -20,7 +20,6 @@ function cloneWorkers(workers) {
 
 export default function CocoaProcessing() {
   const [batches, setBatches] = useState([]);
-  const [sourceBatches, setSourceBatches] = useState([]);
   const [workers, setWorkers] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [roastLots, setRoastLots] = useState([]);
@@ -61,13 +60,11 @@ export default function CocoaProcessing() {
 
   const refresh = async () => {
     try {
-      const [sourceBatchesRes, batchesRes, workersRes, inventoryRes] = await Promise.all([
-        api.get('/batches'),
+      const [batchesRes, workersRes, inventoryRes] = await Promise.all([
         api.get('/cocoa-processing/batches'),
         api.get('/cocoa-processing/workers'),
         api.get('/cocoa-processing/inventory'),
       ]);
-      setSourceBatches(sourceBatchesRes.data || []);
       setBatches(batchesRes.data || []);
       setWorkers(workersRes.data || []);
       setInventory(inventoryRes.data || []);
@@ -102,16 +99,6 @@ export default function CocoaProcessing() {
       .then((res) => setRoastingBatchLots(res.data || []))
       .catch(() => setRoastingBatchLots([]));
   }, [roasting.batch_code]);
-
-  const batchCodes = useMemo(
-    () => Array.from(new Set(batches.map((item) => item.batch_code).filter(Boolean))),
-    [batches]
-  );
-
-  const sourceBatchCodes = useMemo(
-    () => Array.from(new Set(sourceBatches.map((item) => item.batch_code).filter(Boolean))),
-    [sourceBatches]
-  );
 
   const beansArrivalTotalWeightKg = useMemo(
     () => beansArrival.bag_details.reduce((sum, bag) => sum + toNumber(bag.weight_kg), 0),
@@ -506,17 +493,11 @@ export default function CocoaProcessing() {
             <div className="form-group">
               <label>Batch Code *</label>
               <input
-                list="source-batch-codes"
                 value={beansArrival.batch_code}
                 onChange={(e) => setBeansArrival({ ...beansArrival, batch_code: e.target.value.toUpperCase() })}
-                placeholder="Select or type batch code"
+                placeholder="Type batch code"
                 required
               />
-              <datalist id="source-batch-codes">
-                {sourceBatchCodes.map((code) => (
-                  <option key={code} value={code} />
-                ))}
-              </datalist>
             </div>
             <div style={{ marginBottom: 14 }}>
               <button className="btn btn-secondary" type="button" onClick={() => loadBeansArrivalBatch(beansArrival.batch_code)} disabled={!selectedBeansArrivalBatch}>
@@ -615,17 +596,11 @@ export default function CocoaProcessing() {
               <div className="form-group">
                 <label>Batch Code *</label>
                 <input
-                  list="processing-batch-codes"
                   value={roasting.batch_code}
                   onChange={(e) => loadRoastingBatch(e.target.value)}
-                  placeholder="Select or type processing batch"
+                  placeholder="Type processing batch code"
                   required
                 />
-                <datalist id="processing-batch-codes">
-                  {batchCodes.map((code) => (
-                    <option key={code} value={code} />
-                  ))}
-                </datalist>
               </div>
 
               <div className="stat-chip-grid" style={{ marginBottom: 16 }}>
@@ -733,10 +708,9 @@ export default function CocoaProcessing() {
             <div className="form-group">
               <label>Batch Code *</label>
               <input
-                list="processing-batch-codes"
                 value={winnowing.batch_code}
                 onChange={(e) => setWinnowing({ ...winnowing, batch_code: e.target.value.toUpperCase() })}
-                placeholder="Select or type processing batch"
+                placeholder="Type processing batch code"
                 required
               />
             </div>
@@ -783,10 +757,9 @@ export default function CocoaProcessing() {
             <div className="form-group">
               <label>Batch Code *</label>
               <input
-                list="processing-batch-codes"
                 value={cleaning.batch_code}
                 onChange={(e) => setCleaning({ ...cleaning, batch_code: e.target.value.toUpperCase() })}
-                placeholder="Select or type processing batch"
+                placeholder="Type processing batch code"
                 required
               />
             </div>
@@ -879,10 +852,9 @@ export default function CocoaProcessing() {
             <div className="form-group">
               <label>Batch Code *</label>
               <input
-                list="processing-batch-codes"
                 value={nibsPacking.batch_code}
                 onChange={(e) => setNibsPacking({ ...nibsPacking, batch_code: e.target.value.toUpperCase() })}
-                placeholder="Select or type processing batch"
+                placeholder="Type processing batch code"
                 required
               />
             </div>
@@ -946,10 +918,9 @@ export default function CocoaProcessing() {
               <div className="form-group">
                 <label>Batch Code</label>
                 <input
-                  list="processing-batch-codes"
                   value={selectedBatchCodeForRoast}
                   onChange={(e) => setSelectedBatchCodeForRoast(e.target.value.toUpperCase())}
-                  placeholder="Select or type processing batch"
+                  placeholder="Type processing batch code"
                 />
               </div>
               <div className="table-wrap">
